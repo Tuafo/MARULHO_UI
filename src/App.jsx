@@ -1,0 +1,920 @@
+import { lazy, Suspense, startTransition, useEffect, useRef, useState } from 'react'
+import {
+  AlertCircleIcon,
+  ArchiveIcon,
+  BarChart3Icon,
+  BrainIcon,
+  CpuIcon,
+  HistoryIcon,
+  LoaderCircleIcon,
+  MessageSquareTextIcon,
+  ShieldCheckIcon,
+  WifiIcon,
+  WifiOffIcon,
+  WorkflowIcon,
+} from 'lucide-react'
+
+import { HelpTip, SectionFallback } from '@/components/dashboard/shared'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuBadge,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarSeparator,
+  SidebarTrigger,
+} from '@/components/ui/sidebar'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import {
+  DEFAULT_API_BASE,
+  fileName,
+  formatWhen,
+  normalizeApiBase,
+} from '@/lib/dashboard-utils'
+import { requestJson } from '@/lib/service-api'
+
+const OverviewSection = lazy(() => import('@/components/dashboard/OverviewSection'))
+const AskSection = lazy(() => import('@/components/dashboard/AskSection'))
+const RuntimeSection = lazy(() => import('@/components/dashboard/RuntimeSection'))
+const BenchmarkReportsSection = lazy(() => import('@/components/dashboard/BenchmarkReportsSection'))
+const CheckpointsSection = lazy(() => import('@/components/dashboard/CheckpointsSection'))
+const TracesSection = lazy(() => import('@/components/dashboard/TracesSection'))
+
+const SECTIONS = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    icon: BarChart3Icon,
+    help: 'Live summary cards and stable telemetry charts.',
+  },
+  {
+    id: 'ask',
+    label: 'Ask',
+    icon: MessageSquareTextIcon,
+    help: 'Inspect routing, evidence, and grounded answers.',
+  },
+  {
+    id: 'benchmarks',
+    label: 'Benchmarks',
+    icon: WorkflowIcon,
+    help: 'Plots pulled from the archived learning, memory, routing, and autonomy benchmarks.',
+  },
+  {
+    id: 'runtime',
+    label: 'Runtime',
+    icon: CpuIcon,
+    help: 'Model, memory, and routing internals for the active checkpoint.',
+  },
+  {
+    id: 'checkpoints',
+    label: 'Checkpoints',
+    icon: ArchiveIcon,
+    help: 'Save the current runtime or restore a stored snapshot.',
+  },
+  {
+    id: 'traces',
+    label: 'Traces',
+    icon: HistoryIcon,
+    help: 'Open stored traces and review prior requests, evidence, and routes.',
+  },
+]
+
+const SECTION_TITLES = {
+  overview: 'Loading overview',
+  ask: 'Loading ask workspace',
+  benchmarks: 'Loading benchmark reports',
+  runtime: 'Loading runtime details',
+  checkpoints: 'Loading checkpoints',
+  traces: 'Loading traces',
+}
+
+function createEmptyAcquisitionOverrides() {
+  return {
+    acquisitionSlots: '',
+    acquisitionTokens: '',
+    scoutCommitTokens: '',
+    scoutTopK: '',
+    semanticShortlistSize: '',
+  }
+}
+
+function parseOptionalInteger(value) {
+  const trimmed = String(value || '').trim()
+  if (!trimmed) {
+    return null
+  }
+
+  const numericValue = Number.parseInt(trimmed, 10)
+  return Number.isFinite(numericValue) ? numericValue : null
+}
+
+function serializeAcquisitionOverrides(overrides) {
+  const payload = {
+    acquisition_slots: parseOptionalInteger(overrides.acquisitionSlots),
+    acquisition_tokens: parseOptionalInteger(overrides.acquisitionTokens),
+    scout_commit_tokens: parseOptionalInteger(overrides.scoutCommitTokens),
+    scout_top_k: parseOptionalInteger(overrides.scoutTopK),
+    semantic_shortlist_size: parseOptionalInteger(overrides.semanticShortlistSize),
+  }
+
+  return Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== null))
+}
+
+function App() {
+  const [apiBase, setApiBase] = useState(DEFAULT_API_BASE)
+  const [apiBaseInput, setApiBaseInput] = useState(DEFAULT_API_BASE)
+  const [status, setStatus] = useState(null)
+  const [checkpoints, setCheckpoints] = useState([])
+  const [traces, setTraces] = useState([])
+  const [selectedTraceId, setSelectedTraceId] = useState('')
+  const [conversation, setConversation] = useState([])
+  const [draft, setDraft] = useState('')
+  const [contextText, setContextText] = useState('')
+  const [autoLearn, setAutoLearn] = useState(true)
+  const [acquisitionPresets, setAcquisitionPresets] = useState([])
+  const [acquisitionPreset, setAcquisitionPreset] = useState('')
+  const [acquisitionPolicy, setAcquisitionPolicy] = useState('scout_commit')
+  const [acquisitionOverrides, setAcquisitionOverrides] = useState(createEmptyAcquisitionOverrides)
+  const [lastAcquisition, setLastAcquisition] = useState(null)
+  const [pendingAction, setPendingAction] = useState('')
+  const [error, setError] = useState('')
+  const [previewQuery, setPreviewQuery] = useState(null)
+  const [previewResponse, setPreviewResponse] = useState(null)
+  const [selectedCheckpoint, setSelectedCheckpoint] = useState('')
+  const [telemetryHistory, setTelemetryHistory] = useState([])
+  const [streamConnected, setStreamConnected] = useState(false)
+  const [activeSection, setActiveSection] = useState('overview')
+  const [benchmarkReports, setBenchmarkReports] = useState(null)
+  const [benchmarkReportsLoading, setBenchmarkReportsLoading] = useState(false)
+  const [benchmarkReportsError, setBenchmarkReportsError] = useState('')
+  const lastTraceIdRef = useRef('')
+  const retryDelayRef = useRef(1000)
+  const retryTimeoutRef = useRef(null)
+
+  useEffect(() => {
+    document.documentElement.classList.add('dark')
+
+    return () => {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [])
+
+  useEffect(() => {
+    setBenchmarkReports(null)
+    setBenchmarkReportsError('')
+    setBenchmarkReportsLoading(false)
+    setAcquisitionPresets([])
+    setAcquisitionPreset('')
+    setAcquisitionPolicy('scout_commit')
+    setAcquisitionOverrides(createEmptyAcquisitionOverrides())
+    setLastAcquisition(null)
+  }, [apiBase])
+
+  useEffect(() => {
+    if (!acquisitionPreset && acquisitionPresets.length) {
+      setAcquisitionPreset(acquisitionPresets[0])
+    }
+  }, [acquisitionPreset, acquisitionPresets])
+
+  const selectedTrace = traces.find((trace) => trace.trace_id === selectedTraceId) || null
+  const activeQuery = previewQuery || selectedTrace?.query_result || null
+  const activeResponse = previewResponse || selectedTrace?.response || null
+  const checkpointMetadata = status?.checkpoint_metadata || {}
+  const runtimeScope = status?.runtime_scope || {}
+  const routingIndex = runtimeScope.routing_index || {}
+  const weightDistribution = runtimeScope.weight_distribution || {}
+  const columnInputWeights = weightDistribution.column_input_weights || {}
+  const memoryStore = status?.memory_store || {}
+  const checkpointName = fileName(selectedCheckpoint || status?.checkpoint_path)
+  const benchmarkReportCount = (benchmarkReports?.benchmarks || []).length
+
+  const telemetryData = telemetryHistory.map((item, index) => ({
+    sample: index + 1,
+    tokens: Number(item.token_count || 0),
+    memoryFill: Number(item.memory_store?.slow_buffer_fill_fraction ?? item.memory_fill_fraction ?? 0),
+    driftFloor: Number(item.drift_floor ?? item.drift ?? 0),
+    dopamine: Number(item.dopamine ?? 0),
+    acetylcholine: Number(item.acetylcholine ?? 0),
+    norepinephrine: Number(item.norepinephrine ?? 0),
+  }))
+
+  const conversationEntries = conversation.length
+    ? conversation
+    : selectedTrace?.request?.query_text
+      ? [
+        {
+          key: `${selectedTrace.trace_id}-user`,
+          role: 'user',
+          text: selectedTrace.request.query_text,
+        },
+        ...(selectedTrace.response?.response_text
+          ? [{
+            key: `${selectedTrace.trace_id}-assistant`,
+            role: 'assistant',
+            text: selectedTrace.response.response_text,
+          }]
+          : []),
+      ]
+      : []
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function bootstrap() {
+      try {
+        const [nextStatus, nextCheckpoints, nextTraces, nextAcquisition] = await Promise.all([
+          requestJson(apiBase, '/status'),
+          requestJson(apiBase, '/checkpoints'),
+          requestJson(apiBase, '/traces?limit=20'),
+          requestJson(apiBase, '/acquisition/presets'),
+        ])
+
+        if (cancelled) {
+          return
+        }
+
+        const nextTraceId = nextStatus.last_trace_id || nextTraces.traces?.[0]?.trace_id || ''
+
+        startTransition(() => {
+          setStatus(nextStatus)
+          setCheckpoints(nextCheckpoints.checkpoints || [])
+          setTraces(nextTraces.traces || [])
+          setAcquisitionPresets(nextAcquisition.presets || [])
+          setSelectedCheckpoint(nextStatus.checkpoint_path || nextCheckpoints.checkpoints?.[0]?.path || '')
+          setSelectedTraceId(nextTraceId)
+          setTelemetryHistory((history) => [...history, nextStatus].slice(-80))
+        })
+
+        lastTraceIdRef.current = nextTraceId
+        setError('')
+      } catch (err) {
+        if (!cancelled) {
+          setError(String(err.message || err))
+        }
+      }
+    }
+
+    bootstrap()
+
+    return () => {
+      cancelled = true
+    }
+  }, [apiBase])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadReports() {
+      setBenchmarkReportsLoading(true)
+      setBenchmarkReportsError('')
+
+      try {
+        const payload = await requestJson(apiBase, '/reports/benchmarks')
+        if (!cancelled) {
+          startTransition(() => {
+            setBenchmarkReports(payload)
+          })
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setBenchmarkReportsError(String(err.message || err))
+        }
+      } finally {
+        if (!cancelled) {
+          setBenchmarkReportsLoading(false)
+        }
+      }
+    }
+
+    loadReports()
+
+    return () => {
+      cancelled = true
+    }
+  }, [apiBase])
+
+  useEffect(() => {
+    let source = null
+
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current)
+      retryTimeoutRef.current = null
+    }
+
+    const connect = () => {
+      source = new EventSource(`${apiBase}/stream/status`)
+
+      source.addEventListener('status', (event) => {
+        const payload = JSON.parse(event.data)
+        retryDelayRef.current = 1000
+        setStreamConnected(true)
+        setError('')
+
+        startTransition(() => {
+          setStatus((current) => ({ ...(current || {}), ...payload }))
+          setTelemetryHistory((history) => [...history, payload].slice(-80))
+        })
+
+        if (payload.last_trace_id && payload.last_trace_id !== lastTraceIdRef.current) {
+          lastTraceIdRef.current = payload.last_trace_id
+          refreshTraces(payload.last_trace_id)
+        }
+      })
+
+      source.onerror = () => {
+        setStreamConnected(false)
+        setError((current) => current || 'The live status stream dropped. The page will keep trying to reconnect.')
+
+        source.close()
+
+        if (retryTimeoutRef.current) {
+          clearTimeout(retryTimeoutRef.current)
+        }
+
+        const delay = retryDelayRef.current
+        retryTimeoutRef.current = setTimeout(() => {
+          retryTimeoutRef.current = null
+          connect()
+        }, delay)
+        retryDelayRef.current = Math.min(delay * 2, 30000)
+      }
+    }
+
+    connect()
+
+    return () => {
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current)
+        retryTimeoutRef.current = null
+      }
+
+      source?.close()
+    }
+  }, [apiBase])
+
+  async function refreshStatus() {
+    try {
+      const payload = await requestJson(apiBase, '/status')
+      startTransition(() => {
+        setStatus(payload)
+        setSelectedCheckpoint((current) => current || payload.checkpoint_path || '')
+      })
+      return payload
+    } catch (err) {
+      setError(String(err.message || err))
+      return null
+    }
+  }
+
+  async function refreshTraces(nextTraceId = '') {
+    try {
+      const payload = await requestJson(apiBase, '/traces?limit=20')
+      const nextTraces = payload.traces || []
+
+      startTransition(() => {
+        setTraces(nextTraces)
+        setSelectedTraceId((current) => {
+          if (nextTraceId) {
+            return nextTraceId
+          }
+
+          if (current && nextTraces.some((trace) => trace.trace_id === current)) {
+            return current
+          }
+
+          return nextTraces[0]?.trace_id || ''
+        })
+      })
+    } catch (err) {
+      setError(String(err.message || err))
+    }
+  }
+
+  async function refreshCheckpoints() {
+    try {
+      const payload = await requestJson(apiBase, '/checkpoints')
+      startTransition(() => {
+        setCheckpoints(payload.checkpoints || [])
+      })
+    } catch (err) {
+      setError(String(err.message || err))
+    }
+  }
+
+  async function refreshBenchmarkReports(force = false) {
+    if (benchmarkReportsLoading || (!force && benchmarkReports !== null)) {
+      return
+    }
+
+    setBenchmarkReportsLoading(true)
+    setBenchmarkReportsError('')
+
+    try {
+      const payload = await requestJson(apiBase, '/reports/benchmarks')
+      startTransition(() => {
+        setBenchmarkReports(payload)
+      })
+    } catch (err) {
+      setBenchmarkReportsError(String(err.message || err))
+    } finally {
+      setBenchmarkReportsLoading(false)
+    }
+  }
+
+  async function refreshAcquisitionPresets() {
+    try {
+      const payload = await requestJson(apiBase, '/acquisition/presets')
+      startTransition(() => {
+        setAcquisitionPresets(payload.presets || [])
+      })
+    } catch (err) {
+      setError(String(err.message || err))
+    }
+  }
+
+  function applyApiBase() {
+    const nextValue = normalizeApiBase(apiBaseInput)
+    setApiBaseInput(nextValue)
+    setApiBase(nextValue)
+  }
+
+  async function runQuery() {
+    if (!draft.trim()) {
+      return
+    }
+
+    setPendingAction('Inspecting the route and memory matches')
+    setError('')
+
+    try {
+      const payload = await requestJson(apiBase, '/query', {
+        method: 'POST',
+        body: JSON.stringify({
+          query_text: draft.trim(),
+          context_text: contextText || null,
+          top_k_candidates: 6,
+          top_k_memories: 6,
+          top_chars: 6,
+        }),
+      })
+
+      setPreviewQuery(payload)
+      setPreviewResponse(null)
+      setActiveSection('ask')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    } catch (err) {
+      setError(String(err.message || err))
+    } finally {
+      setPendingAction('')
+    }
+  }
+
+  async function sendMessage(event) {
+    event.preventDefault()
+
+    if (!draft.trim()) {
+      return
+    }
+
+    const text = draft.trim()
+    setPendingAction('Producing an evidence-grounded answer')
+    setError('')
+
+    try {
+      const bundle = await requestJson(apiBase, '/respond', {
+        method: 'POST',
+        body: JSON.stringify({
+          query_text: text,
+          context_text: contextText || null,
+          learn_mode: autoLearn ? 'user_and_selected_evidence' : 'none',
+          max_evidence_items: 3,
+          top_k_candidates: 6,
+          top_k_memories: 6,
+          top_chars: 6,
+        }),
+      })
+
+      setDraft('')
+      setPreviewQuery(bundle.query_result)
+      setPreviewResponse(bundle.response)
+      setSelectedTraceId(bundle.trace_id)
+      setActiveSection('ask')
+      lastTraceIdRef.current = bundle.trace_id
+
+      startTransition(() => {
+        setConversation((items) => [
+          ...items,
+          { key: `${bundle.trace_id}-user`, role: 'user', text },
+          {
+            key: `${bundle.trace_id}-assistant`,
+            role: 'assistant',
+            text: bundle.response.response_text,
+          },
+        ])
+      })
+
+      await Promise.all([
+        refreshTraces(bundle.trace_id),
+        refreshCheckpoints(),
+        refreshStatus(),
+      ])
+    } catch (err) {
+      setError(String(err.message || err))
+    } finally {
+      setPendingAction('')
+    }
+  }
+
+  async function saveCheckpoint() {
+    setPendingAction('Saving a new checkpoint')
+    setError('')
+
+    try {
+      const payload = await requestJson(apiBase, '/checkpoint/save', {
+        method: 'POST',
+        body: JSON.stringify({ path: null }),
+      })
+
+      setSelectedCheckpoint(payload.path)
+
+      await Promise.all([
+        refreshCheckpoints(),
+        refreshStatus(),
+      ])
+    } catch (err) {
+      setError(String(err.message || err))
+    } finally {
+      setPendingAction('')
+    }
+  }
+
+  async function restoreCheckpoint() {
+    if (!selectedCheckpoint) {
+      return
+    }
+
+    setPendingAction('Restoring the selected checkpoint')
+    setError('')
+
+    try {
+      await requestJson(apiBase, '/checkpoint/restore', {
+        method: 'POST',
+        body: JSON.stringify({ path: selectedCheckpoint }),
+      })
+
+      setConversation([])
+      setPreviewQuery(null)
+      setPreviewResponse(null)
+
+      await Promise.all([
+        refreshStatus(),
+        refreshCheckpoints(),
+        refreshTraces(),
+      ])
+    } catch (err) {
+      setError(String(err.message || err))
+    } finally {
+      setPendingAction('')
+    }
+  }
+
+  async function runAcquisition() {
+    if (!acquisitionPreset) {
+      return
+    }
+
+    setPendingAction(`Running acquisition preset ${acquisitionPreset}`)
+    setError('')
+
+    try {
+      const payload = await requestJson(apiBase, '/acquisition/run', {
+        method: 'POST',
+        body: JSON.stringify({
+          preset: acquisitionPreset,
+          policy: acquisitionPolicy,
+          ...serializeAcquisitionOverrides(acquisitionOverrides),
+        }),
+      })
+
+      setLastAcquisition(payload)
+      setActiveSection('ask')
+
+      await Promise.all([
+        refreshTraces(),
+        refreshCheckpoints(),
+        refreshStatus(),
+      ])
+    } catch (err) {
+      setError(String(err.message || err))
+    } finally {
+      setPendingAction('')
+    }
+  }
+
+  function handleTraceSelection(traceId) {
+    setSelectedTraceId(traceId)
+    setPreviewQuery(null)
+    setPreviewResponse(null)
+    setActiveSection('traces')
+    lastTraceIdRef.current = traceId
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function selectSection(id) {
+    setActiveSection(id)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function renderActiveSection() {
+    switch (activeSection) {
+      case 'ask':
+        return (
+          <AskSection
+            activeQuery={activeQuery}
+            activeResponse={activeResponse}
+            acquisitionPolicy={acquisitionPolicy}
+            acquisitionPreset={acquisitionPreset}
+            acquisitionPresets={acquisitionPresets}
+            acquisitionOverrides={acquisitionOverrides}
+            autoLearn={autoLearn}
+            conversationEntries={conversationEntries}
+            draft={draft}
+            lastAcquisition={lastAcquisition}
+            pendingAction={pendingAction}
+            runQuery={runQuery}
+            runAcquisition={runAcquisition}
+            selectedTrace={selectedTrace}
+            selectedTraceId={selectedTraceId}
+            sendMessage={sendMessage}
+            setAcquisitionPolicy={setAcquisitionPolicy}
+            setAcquisitionPreset={setAcquisitionPreset}
+            setAcquisitionOverrides={setAcquisitionOverrides}
+            setAutoLearn={setAutoLearn}
+            setDraft={setDraft}
+          />
+        )
+      case 'benchmarks':
+        return (
+          <BenchmarkReportsSection
+            error={benchmarkReportsError}
+            loading={benchmarkReportsLoading}
+            onRefresh={() => refreshBenchmarkReports(true)}
+            reports={benchmarkReports}
+          />
+        )
+      case 'runtime':
+        return (
+          <RuntimeSection
+            checkpointMetadata={checkpointMetadata}
+            columnInputWeights={columnInputWeights}
+            memoryStore={memoryStore}
+            routingIndex={routingIndex}
+            runtimeScope={runtimeScope}
+            status={status}
+            weightDistribution={weightDistribution}
+          />
+        )
+      case 'checkpoints':
+        return (
+          <CheckpointsSection
+            checkpoints={checkpoints}
+            pendingAction={pendingAction}
+            restoreCheckpoint={restoreCheckpoint}
+            saveCheckpoint={saveCheckpoint}
+            selectedCheckpoint={selectedCheckpoint}
+            setSelectedCheckpoint={setSelectedCheckpoint}
+            status={status}
+          />
+        )
+      case 'traces':
+        return (
+          <TracesSection
+            handleTraceSelection={handleTraceSelection}
+            selectedTrace={selectedTrace}
+            selectedTraceId={selectedTraceId}
+            status={status}
+            traces={traces}
+          />
+        )
+      case 'overview':
+      default:
+        return (
+          <OverviewSection
+            activeResponse={activeResponse}
+            checkpointName={checkpointName}
+            memoryStore={memoryStore}
+            status={status}
+            telemetryData={telemetryData}
+          />
+        )
+    }
+  }
+
+  return (
+    <TooltipProvider>
+      <SidebarProvider defaultOpen>
+        <Sidebar variant="inset" collapsible="icon">
+          <SidebarHeader className="gap-3 border-b border-sidebar-border/70">
+            <button
+              type="button"
+              onClick={() => selectSection('overview')}
+              className="flex w-full items-start gap-3 rounded-lg border border-sidebar-border/70 bg-sidebar-accent/35 p-3 text-left transition-colors hover:bg-sidebar-accent/55"
+            >
+              <div className="flex size-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                <BrainIcon className="size-4" />
+              </div>
+              <div className="space-y-1">
+                <div className="font-medium">HECSN console</div>
+                <div className="text-xs leading-5 text-sidebar-foreground/70">
+                  Evidence-first chat, benchmark plots, and checkpoint control.
+                </div>
+              </div>
+            </button>
+          </SidebarHeader>
+
+          <SidebarContent>
+            <SidebarGroup>
+              <SidebarGroupLabel>Workspace</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {SECTIONS.map((item) => (
+                    <SidebarMenuItem key={item.id}>
+                      <SidebarMenuButton
+                        type="button"
+                        isActive={activeSection === item.id}
+                        onClick={() => selectSection(item.id)}
+                        tooltip={item.help}
+                      >
+                        <item.icon />
+                        <span>{item.label}</span>
+                      </SidebarMenuButton>
+                      {item.id === 'benchmarks' && benchmarkReports ? <SidebarMenuBadge>{benchmarkReportCount}</SidebarMenuBadge> : null}
+                      {item.id === 'checkpoints' ? <SidebarMenuBadge>{checkpoints.length}</SidebarMenuBadge> : null}
+                      {item.id === 'traces' ? <SidebarMenuBadge>{status?.trace_history_size ?? traces.length}</SidebarMenuBadge> : null}
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+
+            <SidebarGroup>
+              <SidebarGroupLabel>Quick read</SidebarGroupLabel>
+              <SidebarGroupContent className="px-2 pb-2">
+                <div className="space-y-3 rounded-lg border border-sidebar-border/70 bg-sidebar-accent/25 p-3 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sidebar-foreground/70">Connection</span>
+                    <Badge variant={streamConnected ? 'secondary' : 'destructive'}>
+                      {streamConnected ? 'live' : 'reconnecting'}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sidebar-foreground/70">Checkpoint</span>
+                    <span className="max-w-28 truncate font-medium">{checkpointName}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sidebar-foreground/70">Tokens</span>
+                    <span className="font-medium">{status?.token_count?.toLocaleString() || 'n/a'}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sidebar-foreground/70">Benchmarks</span>
+                    <span className="font-medium">{benchmarkReports ? benchmarkReportCount : 'on demand'}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sidebar-foreground/70">Last trace</span>
+                    <span className="max-w-28 truncate font-medium">{formatWhen(status?.last_trace_created_at)}</span>
+                  </div>
+                </div>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </SidebarContent>
+
+          <SidebarSeparator />
+
+          <SidebarFooter>
+            <div className="space-y-2 rounded-lg border border-sidebar-border/70 bg-sidebar-accent/15 p-3 text-xs text-sidebar-foreground/75">
+              <div className="flex items-center gap-2 font-medium text-sidebar-foreground">
+                <ShieldCheckIcon className="size-3.5" />
+                Strict evidence mode
+              </div>
+              <p className="leading-5">
+                Replies should only go out when the retrieved memory gives enough support.
+              </p>
+            </div>
+          </SidebarFooter>
+
+          <SidebarRail />
+        </Sidebar>
+
+        <SidebarInset className="min-w-0 bg-background">
+          <header className="sticky top-0 z-20 border-b bg-background/92 backdrop-blur">
+            <div className="flex flex-col gap-4 px-4 py-4 md:px-6">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3">
+                    <SidebarTrigger className="mt-0.5" />
+                    <div className="space-y-1">
+                      <h1 className="text-xl font-medium tracking-tight">HECSN service workspace</h1>
+                      <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
+                        Ask questions, inspect the selected route, compare benchmark metrics, and manage checkpoints without losing the evidence trail.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={streamConnected ? 'secondary' : 'destructive'}>
+                      {streamConnected ? <WifiIcon className="size-3.5" /> : <WifiOffIcon className="size-3.5" />}
+                      {streamConnected ? 'Status stream live' : 'Status stream reconnecting'}
+                    </Badge>
+                    <Badge variant={status?.dirty_state ? 'outline' : 'secondary'}>
+                      {status?.dirty_state ? 'Unsaved runtime changes' : 'Runtime matches the checkpoint'}
+                    </Badge>
+                    <Badge variant={status?.context_supported ? 'secondary' : 'outline'}>
+                      {status?.context_supported ? 'Context routing available' : 'No context routing in this checkpoint'}
+                    </Badge>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 lg:min-w-[40rem] lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      API base
+                      <HelpTip>Where the frontend sends requests. Leave the default local address unless the backend moved.</HelpTip>
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        value={apiBaseInput}
+                        onChange={(event) => setApiBaseInput(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault()
+                            applyApiBase()
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={applyApiBase}
+                        disabled={normalizeApiBase(apiBaseInput) === apiBase}
+                      >
+                        Apply
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      Context text
+                      <HelpTip>Optional extra hints that ride along with the next query. Use this to narrow the search space.</HelpTip>
+                    </div>
+                    <Input
+                      value={contextText}
+                      onChange={(event) => setContextText(event.target.value)}
+                      placeholder="Optional context for the next request"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </header>
+
+          <div className="flex flex-1 flex-col gap-6 p-4 md:p-6">
+            {error ? (
+              <Alert variant="destructive">
+                <AlertCircleIcon className="size-4" />
+                <AlertTitle>Service error</AlertTitle>
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            ) : null}
+
+            {pendingAction ? (
+              <Alert>
+                <LoaderCircleIcon className="size-4 animate-spin" />
+                <AlertTitle>Working</AlertTitle>
+                <AlertDescription>{pendingAction}</AlertDescription>
+              </Alert>
+            ) : null}
+
+            <Suspense fallback={<SectionFallback title={SECTION_TITLES[activeSection]} />}>
+              {renderActiveSection()}
+            </Suspense>
+          </div>
+        </SidebarInset>
+      </SidebarProvider>
+    </TooltipProvider>
+  )
+}
+
+export default App
