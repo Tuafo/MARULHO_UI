@@ -1,4 +1,11 @@
-import { MessageSquareTextIcon, SearchIcon, ShieldCheckIcon } from 'lucide-react'
+import {
+  AlertCircleIcon,
+  MessageSquareTextIcon,
+  PlusIcon,
+  SearchIcon,
+  ShieldCheckIcon,
+  Trash2Icon,
+} from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -56,25 +63,23 @@ const EVIDENCE_CHART_CONFIG = {
 export default function AskSection({
   activeQuery,
   activeResponse,
-  acquisitionPolicy,
-  acquisitionPreset,
-  acquisitionPresets,
-  acquisitionOverrides,
   autoLearn,
+  brainConfig,
+  brainRuntime,
+  configureBrain,
   conversationEntries,
   draft,
-  lastAcquisition,
   pendingAction,
   runQuery,
-  runAcquisition,
   selectedTrace,
   selectedTraceId,
   sendMessage,
-  setAcquisitionPolicy,
-  setAcquisitionPreset,
-  setAcquisitionOverrides,
-  setDraft,
   setAutoLearn,
+  setBrainConfig,
+  setDraft,
+  startBrain,
+  stopBrain,
+  tickBrain,
 }) {
   const candidateData = (activeQuery?.query_summary?.top_candidates || []).map((candidate) => ({
     label: `C${candidate.column_id}`,
@@ -86,14 +91,12 @@ export default function AskSection({
   const conceptEntries = conceptSummary?.concepts || []
   const responseConceptGrounding = activeResponse?.concept_grounding || null
   const responseConceptEntries = responseConceptGrounding?.selected_concepts || []
-  const acquisitionResult = lastAcquisition?.acquisition_result || null
-  const activeOverrideEntries = [
-    ['slots', acquisitionOverrides?.acquisitionSlots],
-    ['tokens', acquisitionOverrides?.acquisitionTokens],
-    ['scout commit', acquisitionOverrides?.scoutCommitTokens],
-    ['scout top-k', acquisitionOverrides?.scoutTopK],
-    ['shortlist', acquisitionOverrides?.semanticShortlistSize],
-  ].filter(([, value]) => String(value || '').trim())
+  const sourceProgress = brainRuntime?.source_progress || []
+  const primarySourceProgress = sourceProgress[0] || null
+  const lastAutonomy = brainRuntime?.autonomy?.last_acquisition_summary || null
+  const sourceBankDraft = brainConfig?.sourceBank || []
+  const candidateBankDraft = brainConfig?.candidateBank || []
+  const canConfigureTerminus = sourceBankDraft.some((entry) => String(entry?.source || '').trim())
 
   const evidenceData = (activeResponse?.selected_evidence || []).map((item) => ({
     label: `#${item.memory_index}`,
@@ -101,21 +104,134 @@ export default function AskSection({
     text: item.text,
   }))
 
-  function updateAcquisitionOverride(field, value) {
-    setAcquisitionOverrides((current) => ({
+  function createEmptySourceEntry() {
+    return {
+      name: '',
+      source: '',
+      sourceType: 'auto',
+      textField: 'text',
+      hfConfig: '',
+    }
+  }
+
+  function updateBrainConfig(field, value) {
+    setBrainConfig((current) => ({
       ...current,
       [field]: value,
     }))
   }
 
-  function clearAcquisitionOverrides() {
-    setAcquisitionOverrides({
-      acquisitionSlots: '',
-      acquisitionTokens: '',
-      scoutCommitTokens: '',
-      scoutTopK: '',
-      semanticShortlistSize: '',
+  function updateSourceEntry(section, index, field, value) {
+    setBrainConfig((current) => {
+      const nextEntries = [...(current?.[section] || [createEmptySourceEntry()])]
+      nextEntries[index] = {
+        ...(nextEntries[index] || createEmptySourceEntry()),
+        [field]: value,
+      }
+      return {
+        ...current,
+        [section]: nextEntries,
+      }
     })
+  }
+
+  function addSourceEntry(section) {
+    setBrainConfig((current) => ({
+      ...current,
+      [section]: [...(current?.[section] || []), createEmptySourceEntry()],
+    }))
+  }
+
+  function removeSourceEntry(section, index) {
+    setBrainConfig((current) => {
+      const nextEntries = [...(current?.[section] || [])]
+      nextEntries.splice(index, 1)
+      return {
+        ...current,
+        [section]: nextEntries.length ? nextEntries : [createEmptySourceEntry()],
+      }
+    })
+  }
+
+  function renderSourceBank(section, entries, title, description, addLabel) {
+    return (
+      <div className="space-y-3 rounded-lg border bg-background/60 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="space-y-1">
+            <div className="text-sm font-medium">{title}</div>
+            <div className="text-sm text-muted-foreground">{description}</div>
+          </div>
+          <Button type="button" variant="outline" size="sm" onClick={() => addSourceEntry(section)} disabled={Boolean(pendingAction)}>
+            <PlusIcon className="size-4" />
+            {addLabel}
+          </Button>
+        </div>
+
+        <div className="space-y-3">
+          {entries.map((entry, index) => (
+            <div key={entry?.draftId || `${section}-${index}`} className="space-y-3 rounded-lg border bg-background/70 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs font-medium text-muted-foreground">{title} #{index + 1}</div>
+                {entries.length > 1 ? (
+                  <Button type="button" variant="ghost" size="icon" onClick={() => removeSourceEntry(section, index)} disabled={Boolean(pendingAction)}>
+                    <Trash2Icon className="size-4" />
+                  </Button>
+                ) : null}
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-muted-foreground">Name</div>
+                  <Input
+                    value={entry?.name || ''}
+                    onChange={(event) => updateSourceEntry(section, index, 'name', event.target.value)}
+                    placeholder={section === 'sourceBank' ? `terminus_source_${index + 1}` : `candidate_source_${index + 1}`}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <div className="text-xs font-medium text-muted-foreground">Source</div>
+                  <Input
+                    value={entry?.source || ''}
+                    onChange={(event) => updateSourceEntry(section, index, 'source', event.target.value)}
+                    placeholder="Path, URL, or dataset id"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-muted-foreground">Source type</div>
+                  <Select value={entry?.sourceType || 'auto'} onValueChange={(value) => updateSourceEntry(section, index, 'sourceType', value)}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">auto</SelectItem>
+                      <SelectItem value="file">file</SelectItem>
+                      <SelectItem value="web">web</SelectItem>
+                      <SelectItem value="hf">hf</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-muted-foreground">Text field</div>
+                  <Input
+                    value={entry?.textField || 'text'}
+                    onChange={(event) => updateSourceEntry(section, index, 'textField', event.target.value)}
+                    placeholder="text"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-muted-foreground">HF config</div>
+                  <Input
+                    value={entry?.hfConfig || ''}
+                    onChange={(event) => updateSourceEntry(section, index, 'hfConfig', event.target.value)}
+                    placeholder="optional"
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -184,107 +300,135 @@ export default function AskSection({
             <div className="space-y-3 rounded-lg border bg-muted/10 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-1 text-sm font-medium">
-                  Acquire from knowledge catalog
-                  <HelpTip>Run a maintained acquisition preset against the live trainer without leaving the dashboard. Presets keep the token budget and remote candidate catalog consistent, and semantic catalogs can expand from the current frontier.</HelpTip>
+                  Terminus runtime
+                  <HelpTip>Configure a source stream, then start, stop, or tick the background Terminus loop. The same controls are exposed by the service under /terminus/*.</HelpTip>
                 </div>
-                {acquisitionResult?.selected_source ? <Badge variant="secondary">picked {acquisitionResult.selected_source}</Badge> : null}
+                <Badge variant={brainRuntime?.running ? 'secondary' : 'outline'}>
+                  {brainRuntime?.running ? 'running' : brainRuntime?.configured ? 'configured' : 'unconfigured'}
+                </Badge>
               </div>
 
-              {!acquisitionPresets.length ? (
-                <EmptyState title="No acquisition presets" description="The service did not return any acquisition presets yet." />
-              ) : (
-                <>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <div className="text-xs font-medium text-muted-foreground">Preset</div>
-                      <Select value={acquisitionPreset} onValueChange={setAcquisitionPreset}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Choose a preset" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {acquisitionPresets.map((preset) => (
-                            <SelectItem key={preset} value={preset}>{preset}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+              {brainRuntime?.last_error ? (
+                <Alert variant="destructive">
+                  <AlertCircleIcon className="size-4" />
+                  <AlertTitle>Terminus runtime error</AlertTitle>
+                  <AlertDescription>{brainRuntime.last_error}</AlertDescription>
+                </Alert>
+              ) : null}
 
-                    <div className="space-y-2">
-                      <div className="text-xs font-medium text-muted-foreground">Policy</div>
-                      <Select value={acquisitionPolicy} onValueChange={setAcquisitionPolicy}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Choose a policy" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="scout_commit">scout_commit</SelectItem>
-                          <SelectItem value="active">active</SelectItem>
-                          <SelectItem value="round_robin">round_robin</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-muted-foreground">Tick tokens</div>
+                  <Input type="number" min="1" max="20000" value={brainConfig.tickTokens} onChange={(event) => updateBrainConfig('tickTokens', event.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-muted-foreground">Sleep seconds</div>
+                  <Input type="number" min="0.01" step="0.01" max="60" value={brainConfig.sleepIntervalSeconds} onChange={(event) => updateBrainConfig('sleepIntervalSeconds', event.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-muted-foreground">Tick steps</div>
+                  <Input type="number" min="1" max="128" value={brainConfig.tickSteps} onChange={(event) => updateBrainConfig('tickSteps', event.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-muted-foreground">Autonomy trigger</div>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="200000"
+                    value={brainConfig.autonomyTriggerIntervalTokens}
+                    onChange={(event) => updateBrainConfig('autonomyTriggerIntervalTokens', event.target.value)}
+                    disabled={!brainConfig.autonomyEnabled}
+                  />
+                </div>
+                <label className="flex items-start gap-3 rounded-lg border bg-background/60 p-3 text-sm md:col-span-2 xl:col-span-2">
+                  <Checkbox checked={Boolean(brainConfig.repeatSources)} onCheckedChange={(checked) => updateBrainConfig('repeatSources', Boolean(checked))} />
+                  <span className="space-y-1">
+                    <span className="font-medium">Repeat sources when they exhaust</span>
+                    <span className="block text-muted-foreground">
+                      Leave this on for a continuous loop over finite local sources. Turn it off to let the current bank run dry.
+                    </span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-3 rounded-lg border bg-background/60 p-3 text-sm md:col-span-2 xl:col-span-2">
+                  <Checkbox checked={Boolean(brainConfig.autonomyEnabled)} onCheckedChange={(checked) => updateBrainConfig('autonomyEnabled', Boolean(checked))} />
+                  <span className="space-y-1">
+                    <span className="font-medium">Enable internal active acquisition</span>
+                    <span className="block text-muted-foreground">
+                      Terminus will probe its candidate bank when the trigger interval is reached and acquire from the source it expects to reduce the current gap.
+                    </span>
+                  </span>
+                </label>
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-muted-foreground">Autonomy policy</div>
+                  <Select value={brainConfig.autonomyPolicy || 'active'} onValueChange={(value) => updateBrainConfig('autonomyPolicy', value)} disabled={!brainConfig.autonomyEnabled}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">active</SelectItem>
+                      <SelectItem value="round_robin">round_robin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
 
-                  <div className="space-y-3 rounded-lg border bg-background/60 p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-medium">Manual overrides</div>
-                        <div className="text-xs text-muted-foreground">Leave fields blank to keep the preset defaults.</div>
-                      </div>
-                      <Button type="button" variant="ghost" size="sm" onClick={clearAcquisitionOverrides} disabled={!activeOverrideEntries.length}>
-                        Clear overrides
-                      </Button>
-                    </div>
+              {renderSourceBank(
+                'sourceBank',
+                sourceBankDraft,
+                'Source bank',
+                'Each configured source feeds the background Terminus loop. Keep several sources here to maintain a broader unlabeled stream.',
+                'Add source'
+              )}
 
-                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-                      <div className="space-y-2">
-                        <div className="text-xs font-medium text-muted-foreground">Slots</div>
-                        <Input type="number" min="1" max="16" value={acquisitionOverrides?.acquisitionSlots || ''} onChange={(event) => updateAcquisitionOverride('acquisitionSlots', event.target.value)} placeholder="preset" />
-                      </div>
-                      <div className="space-y-2">
-                        <div className="text-xs font-medium text-muted-foreground">Acquire tokens</div>
-                        <Input type="number" min="1" max="20000" value={acquisitionOverrides?.acquisitionTokens || ''} onChange={(event) => updateAcquisitionOverride('acquisitionTokens', event.target.value)} placeholder="preset" />
-                      </div>
-                      <div className="space-y-2">
-                        <div className="text-xs font-medium text-muted-foreground">Scout commit tokens</div>
-                        <Input type="number" min="0" max="20000" value={acquisitionOverrides?.scoutCommitTokens || ''} onChange={(event) => updateAcquisitionOverride('scoutCommitTokens', event.target.value)} placeholder="preset" />
-                      </div>
-                      <div className="space-y-2">
-                        <div className="text-xs font-medium text-muted-foreground">Scout top-k</div>
-                        <Input type="number" min="1" max="16" value={acquisitionOverrides?.scoutTopK || ''} onChange={(event) => updateAcquisitionOverride('scoutTopK', event.target.value)} placeholder="preset" />
-                      </div>
-                      <div className="space-y-2">
-                        <div className="text-xs font-medium text-muted-foreground">Semantic shortlist</div>
-                        <Input type="number" min="0" max="32" value={acquisitionOverrides?.semanticShortlistSize || ''} onChange={(event) => updateAcquisitionOverride('semanticShortlistSize', event.target.value)} placeholder="preset" />
-                      </div>
-                    </div>
+              {brainConfig.autonomyEnabled ? renderSourceBank(
+                'candidateBank',
+                candidateBankDraft,
+                'Candidate bank',
+                'These sources are only used for internal information seeking when Terminus decides it needs more evidence.',
+                'Add candidate'
+              ) : null}
 
-                    <div className="flex flex-wrap gap-2">
-                      {activeOverrideEntries.length
-                        ? activeOverrideEntries.map(([label, value]) => (
-                          <Badge key={label} variant="outline">{label}: {value}</Badge>
-                        ))
-                        : <Badge variant="secondary">Using preset defaults</Badge>}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background/60 px-3 py-3">
-                    <div className="text-sm text-muted-foreground">
-                      Runs the selected preset, applies any non-empty overrides, and writes a new acquisition trace without forcing a checkpoint save.
-                    </div>
-                    <Button type="button" variant="outline" onClick={runAcquisition} disabled={Boolean(pendingAction) || !acquisitionPreset}>
-                      Run acquisition
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background/60 px-3 py-3">
+                <div className="text-sm text-muted-foreground">
+                  The configured source bank feeds unlabeled character streams into the current checkpoint. If autonomy is configured, the runtime can also trigger active acquisition from its candidate bank.
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" onClick={configureBrain} disabled={Boolean(pendingAction) || !canConfigureTerminus}>
+                    Save runtime
+                  </Button>
+                  <Button type="button" variant="outline" onClick={tickBrain} disabled={Boolean(pendingAction) || !brainRuntime?.configured}>
+                    Tick Terminus
+                  </Button>
+                  {brainRuntime?.running ? (
+                    <Button type="button" variant="outline" onClick={stopBrain} disabled={Boolean(pendingAction)}>
+                      Stop loop
                     </Button>
-                  </div>
+                  ) : (
+                    <Button type="button" onClick={startBrain} disabled={Boolean(pendingAction) || !brainRuntime?.configured}>
+                      Start loop
+                    </Button>
+                  )}
+                </div>
+              </div>
 
-                  {acquisitionResult ? (
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                      <DetailItem label="Selected source" value={acquisitionResult.selected_source || 'n/a'} help="Which candidate source the controller chose on the most recent acquisition run." />
-                      <DetailItem label="Tokens trained" value={acquisitionResult.tokens_trained_total ?? 'n/a'} help="How many tokens were actually trained during the most recent acquisition run." />
-                      <DetailItem label="Gap reduction" value={formatFloat(acquisitionResult.selected_gap_reduction, 3)} help="How much the chosen source's measured gap dropped after acquisition." />
-                      <DetailItem label="State revision" value={lastAcquisition?.state_revision ?? 'n/a'} help="The in-memory revision after the acquisition trace completed." />
-                    </div>
-                  ) : null}
-                </>
+              {brainRuntime?.configured ? (
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <DetailItem label="Configured sources" value={brainRuntime?.source_bank?.length ?? 0} help="How many sources are currently wired into the background loop." />
+                  <DetailItem label="Background tokens" value={brainRuntime?.background_tokens_processed ?? 'n/a'} help="How many tokens the background loop has fed into the checkpoint since the current source bank was configured." />
+                  <DetailItem label="Tick count" value={brainRuntime?.tick_count ?? 'n/a'} help="How many background ticks the Terminus loop has completed on the current configuration." />
+                  <DetailItem label="Primary source" value={primarySourceProgress?.name || brainRuntime?.source_bank?.[0]?.name || 'n/a'} help="Which source is currently first in the configured source bank." />
+                  <DetailItem label="Primary progress" value={primarySourceProgress?.tokens_processed ?? 'n/a'} help="How many tokens the first configured source has contributed so far." />
+                  <DetailItem label="Next source" value={brainRuntime?.next_source_name || 'n/a'} help="Which source the round-robin loop will try next." />
+                  <DetailItem label="Last event" value={brainRuntime?.last_event?.type || 'n/a'} help="The most recent Terminus-runtime state transition or tick result." />
+                  <DetailItem label="Last tick tokens" value={brainRuntime?.last_tick_token_delta ?? 'n/a'} help="How many training tokens the last completed tick contributed across source streaming and any triggered autonomy work." />
+                  <DetailItem label="Last tick ms" value={brainRuntime?.last_tick_duration_ms != null ? formatFloat(brainRuntime.last_tick_duration_ms, 2) : 'n/a'} help="Wall-clock duration of the most recent completed Terminus tick." />
+                  <DetailItem label="Autonomy policy" value={brainRuntime?.autonomy?.policy || 'disabled'} help="The active information-seeking policy currently attached to Terminus, if any." />
+                  <DetailItem label="Autonomy trigger" value={brainRuntime?.autonomy?.enabled ? (brainRuntime?.autonomy?.trigger_ready ? 'ready' : `${brainRuntime?.autonomy?.tokens_until_trigger ?? 'n/a'} tokens`) : 'disabled'} help="How close Terminus is to the next internal active-acquisition cycle." />
+                  <DetailItem label="Last acquisition" value={lastAutonomy?.acquired_sources?.join(', ') || 'n/a'} help="Sources selected by the most recent autonomous acquisition cycle." />
+                  <DetailItem label="Recent events" value={brainRuntime?.recent_events?.length ?? 0} help="Rolling history of the latest runtime transitions and tick summaries exposed by the service." />
+                </div>
+              ) : (
+                <EmptyState title="Terminus runtime not configured" description="Save a source above to turn this checkpoint into a continuously learning Terminus runtime." />
               )}
             </div>
 
@@ -568,7 +712,7 @@ export default function AskSection({
                                     : <Badge variant="secondary">none</Badge>}
                                 </div>
                               </TableCell>
-                              <TableCell className="whitespace-normal leading-6">{item.text}</TableCell>
+                              <TableCell className="whitespace-normal break-words leading-6">{item.text}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
@@ -660,7 +804,7 @@ export default function AskSection({
                               <TableCell>#{item.memory_index}</TableCell>
                               <TableCell>{formatFloat(item.similarity, 3)}</TableCell>
                               <TableCell>{item.age_tokens}</TableCell>
-                              <TableCell className="whitespace-normal font-mono text-xs leading-6">{item.raw_window}</TableCell>
+                              <TableCell className="whitespace-normal break-words font-mono text-xs leading-6">{item.raw_window}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>

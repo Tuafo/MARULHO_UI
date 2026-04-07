@@ -1,4 +1,4 @@
-import { lazy, Suspense, startTransition, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, startTransition, useCallback, useEffect, useRef, useState } from 'react'
 import {
   AlertCircleIcon,
   ArchiveIcon,
@@ -11,7 +11,6 @@ import {
   ShieldCheckIcon,
   WifiIcon,
   WifiOffIcon,
-  WorkflowIcon,
 } from 'lucide-react'
 
 import { HelpTip, SectionFallback } from '@/components/dashboard/shared'
@@ -49,7 +48,6 @@ import { requestJson } from '@/lib/service-api'
 const OverviewSection = lazy(() => import('@/components/dashboard/OverviewSection'))
 const AskSection = lazy(() => import('@/components/dashboard/AskSection'))
 const RuntimeSection = lazy(() => import('@/components/dashboard/RuntimeSection'))
-const BenchmarkReportsSection = lazy(() => import('@/components/dashboard/BenchmarkReportsSection'))
 const CheckpointsSection = lazy(() => import('@/components/dashboard/CheckpointsSection'))
 const TracesSection = lazy(() => import('@/components/dashboard/TracesSection'))
 
@@ -65,12 +63,6 @@ const SECTIONS = [
     label: 'Ask',
     icon: MessageSquareTextIcon,
     help: 'Inspect routing, evidence, and grounded answers.',
-  },
-  {
-    id: 'benchmarks',
-    label: 'Benchmarks',
-    icon: WorkflowIcon,
-    help: 'Plots pulled from the archived learning, memory, routing, and autonomy benchmarks.',
   },
   {
     id: 'runtime',
@@ -95,42 +87,141 @@ const SECTIONS = [
 const SECTION_TITLES = {
   overview: 'Loading overview',
   ask: 'Loading ask workspace',
-  benchmarks: 'Loading benchmark reports',
   runtime: 'Loading runtime details',
   checkpoints: 'Loading checkpoints',
   traces: 'Loading traces',
 }
 
-function createEmptyAcquisitionOverrides() {
+let sourceDraftCounter = 0
+
+function nextSourceDraftId() {
+  sourceDraftCounter += 1
+  return `source-draft-${sourceDraftCounter}`
+}
+
+function createEmptySourceDraft() {
   return {
-    acquisitionSlots: '',
-    acquisitionTokens: '',
-    scoutCommitTokens: '',
-    scoutTopK: '',
-    semanticShortlistSize: '',
+    draftId: nextSourceDraftId(),
+    name: '',
+    source: '',
+    sourceType: 'auto',
+    textField: 'text',
+    hfConfig: '',
   }
 }
 
-function parseOptionalInteger(value) {
-  const trimmed = String(value || '').trim()
-  if (!trimmed) {
+function createEmptyBrainConfigDraft() {
+  return {
+    sourceBank: [createEmptySourceDraft()],
+    candidateBank: [createEmptySourceDraft()],
+    autonomyEnabled: false,
+    autonomyPolicy: 'active',
+    autonomyTriggerIntervalTokens: '4096',
+    tickTokens: '128',
+    sleepIntervalSeconds: '0.25',
+    tickSteps: '1',
+    repeatSources: true,
+  }
+}
+
+function createSourceDraftFromRuntime(spec) {
+  return {
+    draftId: nextSourceDraftId(),
+    name: spec?.name || '',
+    source: spec?.source || '',
+    sourceType: spec?.source_type || 'auto',
+    textField: spec?.text_field || 'text',
+    hfConfig: spec?.hf_config || '',
+  }
+}
+
+function createBrainConfigDraftFromRuntime(runtime) {
+  const configuredSourceBank = Array.isArray(runtime?.source_bank) ? runtime.source_bank : []
+  const configuredCandidateBank = Array.isArray(runtime?.autonomy?.candidate_bank)
+    ? runtime.autonomy.candidate_bank
+    : []
+
+  return {
+    sourceBank: configuredSourceBank.length
+      ? configuredSourceBank.map((item) => createSourceDraftFromRuntime(item))
+      : [createEmptySourceDraft()],
+    candidateBank: configuredCandidateBank.length
+      ? configuredCandidateBank.map((item) => createSourceDraftFromRuntime(item))
+      : [createEmptySourceDraft()],
+    autonomyEnabled: Boolean(runtime?.autonomy?.enabled && configuredCandidateBank.length),
+    autonomyPolicy: runtime?.autonomy?.policy || 'active',
+    autonomyTriggerIntervalTokens: String(runtime?.autonomy?.trigger_interval_tokens ?? 4096),
+    tickTokens: String(runtime?.tick_tokens ?? 128),
+    sleepIntervalSeconds: String(runtime?.sleep_interval_seconds ?? 0.25),
+    tickSteps: '1',
+    repeatSources: Boolean(runtime?.repeat_sources ?? true),
+  }
+}
+
+function createBrainConfigRuntimeSignature(runtime) {
+  const configuredSourceBank = Array.isArray(runtime?.source_bank) ? runtime.source_bank : []
+  const configuredCandidateBank = Array.isArray(runtime?.autonomy?.candidate_bank)
+    ? runtime.autonomy.candidate_bank
+    : []
+
+  return JSON.stringify({
+    sourceBank: configuredSourceBank.map((item) => ({
+      name: item?.name || '',
+      source: item?.source || '',
+      sourceType: item?.source_type || 'auto',
+      textField: item?.text_field || 'text',
+      hfConfig: item?.hf_config || '',
+    })),
+    candidateBank: configuredCandidateBank.map((item) => ({
+      name: item?.name || '',
+      source: item?.source || '',
+      sourceType: item?.source_type || 'auto',
+      textField: item?.text_field || 'text',
+      hfConfig: item?.hf_config || '',
+    })),
+    autonomyEnabled: Boolean(runtime?.autonomy?.enabled && configuredCandidateBank.length),
+    autonomyPolicy: runtime?.autonomy?.policy || 'active',
+    autonomyTriggerIntervalTokens: String(runtime?.autonomy?.trigger_interval_tokens ?? 4096),
+    tickTokens: String(runtime?.tick_tokens ?? 128),
+    sleepIntervalSeconds: String(runtime?.sleep_interval_seconds ?? 0.25),
+    tickSteps: '1',
+    repeatSources: Boolean(runtime?.repeat_sources ?? true),
+  })
+}
+
+function normalizeDraftSource(entry, fallbackName) {
+  const source = String(entry?.source || '').trim()
+  if (!source) {
     return null
   }
 
-  const numericValue = Number.parseInt(trimmed, 10)
-  return Number.isFinite(numericValue) ? numericValue : null
+  return {
+    name: String(entry?.name || '').trim() || fallbackName,
+    source,
+    source_type: entry?.sourceType || 'auto',
+    text_field: String(entry?.textField || '').trim() || 'text',
+    hf_config: String(entry?.hfConfig || '').trim() || null,
+  }
 }
 
-function serializeAcquisitionOverrides(overrides) {
-  const payload = {
-    acquisition_slots: parseOptionalInteger(overrides.acquisitionSlots),
-    acquisition_tokens: parseOptionalInteger(overrides.acquisitionTokens),
-    scout_commit_tokens: parseOptionalInteger(overrides.scoutCommitTokens),
-    scout_top_k: parseOptionalInteger(overrides.scoutTopK),
-    semantic_shortlist_size: parseOptionalInteger(overrides.semanticShortlistSize),
+function parsePositiveInteger(value, fallback) {
+  const trimmed = String(value || '').trim()
+  if (!trimmed) {
+    return fallback
   }
 
-  return Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== null))
+  const numericValue = Number.parseInt(trimmed, 10)
+  return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : fallback
+}
+
+function parsePositiveFloat(value, fallback) {
+  const trimmed = String(value || '').trim()
+  if (!trimmed) {
+    return fallback
+  }
+
+  const numericValue = Number.parseFloat(trimmed)
+  return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : fallback
 }
 
 function App() {
@@ -144,11 +235,8 @@ function App() {
   const [draft, setDraft] = useState('')
   const [contextText, setContextText] = useState('')
   const [autoLearn, setAutoLearn] = useState(true)
-  const [acquisitionPresets, setAcquisitionPresets] = useState([])
-  const [acquisitionPreset, setAcquisitionPreset] = useState('')
-  const [acquisitionPolicy, setAcquisitionPolicy] = useState('scout_commit')
-  const [acquisitionOverrides, setAcquisitionOverrides] = useState(createEmptyAcquisitionOverrides)
-  const [lastAcquisition, setLastAcquisition] = useState(null)
+  const [brainConfig, setBrainConfigState] = useState(createEmptyBrainConfigDraft)
+  const [brainConfigDirty, setBrainConfigDirty] = useState(false)
   const [pendingAction, setPendingAction] = useState('')
   const [error, setError] = useState('')
   const [previewQuery, setPreviewQuery] = useState(null)
@@ -157,10 +245,8 @@ function App() {
   const [telemetryHistory, setTelemetryHistory] = useState([])
   const [streamConnected, setStreamConnected] = useState(false)
   const [activeSection, setActiveSection] = useState('overview')
-  const [benchmarkReports, setBenchmarkReports] = useState(null)
-  const [benchmarkReportsLoading, setBenchmarkReportsLoading] = useState(false)
-  const [benchmarkReportsError, setBenchmarkReportsError] = useState('')
   const lastTraceIdRef = useRef('')
+  const brainConfigSignatureRef = useRef('')
   const retryDelayRef = useRef(1000)
   const retryTimeoutRef = useRef(null)
 
@@ -173,25 +259,22 @@ function App() {
   }, [])
 
   useEffect(() => {
-    setBenchmarkReports(null)
-    setBenchmarkReportsError('')
-    setBenchmarkReportsLoading(false)
-    setAcquisitionPresets([])
-    setAcquisitionPreset('')
-    setAcquisitionPolicy('scout_commit')
-    setAcquisitionOverrides(createEmptyAcquisitionOverrides())
-    setLastAcquisition(null)
+    setBrainConfigState(createEmptyBrainConfigDraft())
+    setBrainConfigDirty(false)
+    brainConfigSignatureRef.current = ''
   }, [apiBase])
 
-  useEffect(() => {
-    if (!acquisitionPreset && acquisitionPresets.length) {
-      setAcquisitionPreset(acquisitionPresets[0])
-    }
-  }, [acquisitionPreset, acquisitionPresets])
+  const setBrainConfig = useCallback((nextValue) => {
+    setBrainConfigDirty(true)
+    setBrainConfigState((current) => (
+      typeof nextValue === 'function' ? nextValue(current) : nextValue
+    ))
+  }, [])
 
   const selectedTrace = traces.find((trace) => trace.trace_id === selectedTraceId) || null
   const activeQuery = previewQuery || selectedTrace?.query_result || null
   const activeResponse = previewResponse || selectedTrace?.response || null
+  const brainRuntime = status?.terminus_runtime || null
   const checkpointMetadata = status?.checkpoint_metadata || {}
   const runtimeScope = status?.runtime_scope || {}
   const routingIndex = runtimeScope.routing_index || {}
@@ -199,7 +282,6 @@ function App() {
   const columnInputWeights = weightDistribution.column_input_weights || {}
   const memoryStore = status?.memory_store || {}
   const checkpointName = fileName(selectedCheckpoint || status?.checkpoint_path)
-  const benchmarkReportCount = (benchmarkReports?.benchmarks || []).length
 
   const telemetryData = telemetryHistory.map((item, index) => ({
     sample: index + 1,
@@ -210,6 +292,27 @@ function App() {
     acetylcholine: Number(item.acetylcholine ?? 0),
     norepinephrine: Number(item.norepinephrine ?? 0),
   }))
+
+  useEffect(() => {
+    if (!brainRuntime) {
+      return
+    }
+
+    if (brainConfigDirty) {
+      return
+    }
+
+    const nextSignature = createBrainConfigRuntimeSignature(brainRuntime)
+    if (nextSignature === brainConfigSignatureRef.current) {
+      return
+    }
+
+    brainConfigSignatureRef.current = nextSignature
+    setBrainConfigState((current) => ({
+      ...current,
+      ...createBrainConfigDraftFromRuntime(brainRuntime),
+    }))
+  }, [brainConfigDirty, brainRuntime])
 
   const conversationEntries = conversation.length
     ? conversation
@@ -235,11 +338,10 @@ function App() {
 
     async function bootstrap() {
       try {
-        const [nextStatus, nextCheckpoints, nextTraces, nextAcquisition] = await Promise.all([
+        const [nextStatus, nextCheckpoints, nextTraces] = await Promise.all([
           requestJson(apiBase, '/status'),
           requestJson(apiBase, '/checkpoints'),
           requestJson(apiBase, '/traces?limit=20'),
-          requestJson(apiBase, '/acquisition/presets'),
         ])
 
         if (cancelled) {
@@ -252,7 +354,6 @@ function App() {
           setStatus(nextStatus)
           setCheckpoints(nextCheckpoints.checkpoints || [])
           setTraces(nextTraces.traces || [])
-          setAcquisitionPresets(nextAcquisition.presets || [])
           setSelectedCheckpoint(nextStatus.checkpoint_path || nextCheckpoints.checkpoints?.[0]?.path || '')
           setSelectedTraceId(nextTraceId)
           setTelemetryHistory((history) => [...history, nextStatus].slice(-80))
@@ -268,38 +369,6 @@ function App() {
     }
 
     bootstrap()
-
-    return () => {
-      cancelled = true
-    }
-  }, [apiBase])
-
-  useEffect(() => {
-    let cancelled = false
-
-    async function loadReports() {
-      setBenchmarkReportsLoading(true)
-      setBenchmarkReportsError('')
-
-      try {
-        const payload = await requestJson(apiBase, '/reports/benchmarks')
-        if (!cancelled) {
-          startTransition(() => {
-            setBenchmarkReports(payload)
-          })
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setBenchmarkReportsError(String(err.message || err))
-        }
-      } finally {
-        if (!cancelled) {
-          setBenchmarkReportsLoading(false)
-        }
-      }
-    }
-
-    loadReports()
 
     return () => {
       cancelled = true
@@ -414,34 +483,93 @@ function App() {
     }
   }
 
-  async function refreshBenchmarkReports(force = false) {
-    if (benchmarkReportsLoading || (!force && benchmarkReports !== null)) {
+  async function configureBrain() {
+    const sourceBank = brainConfig.sourceBank
+      .map((entry, index) => normalizeDraftSource(entry, `terminus_source_${index + 1}`))
+      .filter(Boolean)
+    if (!sourceBank.length) {
       return
     }
 
-    setBenchmarkReportsLoading(true)
-    setBenchmarkReportsError('')
+    const candidateBank = brainConfig.candidateBank
+      .map((entry, index) => normalizeDraftSource(entry, `candidate_source_${index + 1}`))
+      .filter(Boolean)
+
+    setPendingAction('Configuring the Terminus runtime')
+    setError('')
 
     try {
-      const payload = await requestJson(apiBase, '/reports/benchmarks')
-      startTransition(() => {
-        setBenchmarkReports(payload)
+      await requestJson(apiBase, '/terminus/configure', {
+        method: 'POST',
+        body: JSON.stringify({
+          source_bank: sourceBank,
+          tick_tokens: parsePositiveInteger(brainConfig.tickTokens, 128),
+          sleep_interval_seconds: parsePositiveFloat(brainConfig.sleepIntervalSeconds, 0.25),
+          repeat_sources: Boolean(brainConfig.repeatSources),
+          autonomy: brainConfig.autonomyEnabled && candidateBank.length
+            ? {
+              enabled: true,
+              policy: brainConfig.autonomyPolicy || 'active',
+              trigger_interval_tokens: parsePositiveInteger(brainConfig.autonomyTriggerIntervalTokens, 4096),
+              candidate_bank: candidateBank,
+            }
+            : null,
+        }),
       })
+
+      setBrainConfigDirty(false)
+      await refreshStatus()
     } catch (err) {
-      setBenchmarkReportsError(String(err.message || err))
+      setError(String(err.message || err))
     } finally {
-      setBenchmarkReportsLoading(false)
+      setPendingAction('')
     }
   }
 
-  async function refreshAcquisitionPresets() {
+  async function startBrain() {
+    setPendingAction('Starting the Terminus runtime')
+    setError('')
+
     try {
-      const payload = await requestJson(apiBase, '/acquisition/presets')
-      startTransition(() => {
-        setAcquisitionPresets(payload.presets || [])
-      })
+      await requestJson(apiBase, '/terminus/start', { method: 'POST' })
+      await refreshStatus()
     } catch (err) {
       setError(String(err.message || err))
+    } finally {
+      setPendingAction('')
+    }
+  }
+
+  async function stopBrain() {
+    setPendingAction('Stopping the Terminus runtime')
+    setError('')
+
+    try {
+      await requestJson(apiBase, '/terminus/stop', { method: 'POST' })
+      await refreshStatus()
+    } catch (err) {
+      setError(String(err.message || err))
+    } finally {
+      setPendingAction('')
+    }
+  }
+
+  async function tickBrain() {
+    setPendingAction('Advancing the Terminus runtime')
+    setError('')
+
+    try {
+      await requestJson(apiBase, '/terminus/tick', {
+        method: 'POST',
+        body: JSON.stringify({
+          steps: parsePositiveInteger(brainConfig.tickSteps, 1),
+        }),
+      })
+      await refreshStatus()
+    } catch (err) {
+      setError(String(err.message || err))
+    } finally {
+      setPendingAction('')
     }
   }
 
@@ -575,6 +703,9 @@ function App() {
         body: JSON.stringify({ path: selectedCheckpoint }),
       })
 
+      setBrainConfigDirty(false)
+      brainConfigSignatureRef.current = ''
+      setBrainConfigState(createEmptyBrainConfigDraft())
       setConversation([])
       setPreviewQuery(null)
       setPreviewResponse(null)
@@ -583,39 +714,6 @@ function App() {
         refreshStatus(),
         refreshCheckpoints(),
         refreshTraces(),
-      ])
-    } catch (err) {
-      setError(String(err.message || err))
-    } finally {
-      setPendingAction('')
-    }
-  }
-
-  async function runAcquisition() {
-    if (!acquisitionPreset) {
-      return
-    }
-
-    setPendingAction(`Running acquisition preset ${acquisitionPreset}`)
-    setError('')
-
-    try {
-      const payload = await requestJson(apiBase, '/acquisition/run', {
-        method: 'POST',
-        body: JSON.stringify({
-          preset: acquisitionPreset,
-          policy: acquisitionPolicy,
-          ...serializeAcquisitionOverrides(acquisitionOverrides),
-        }),
-      })
-
-      setLastAcquisition(payload)
-      setActiveSection('ask')
-
-      await Promise.all([
-        refreshTraces(),
-        refreshCheckpoints(),
-        refreshStatus(),
       ])
     } catch (err) {
       setError(String(err.message || err))
@@ -645,34 +743,23 @@ function App() {
           <AskSection
             activeQuery={activeQuery}
             activeResponse={activeResponse}
-            acquisitionPolicy={acquisitionPolicy}
-            acquisitionPreset={acquisitionPreset}
-            acquisitionPresets={acquisitionPresets}
-            acquisitionOverrides={acquisitionOverrides}
             autoLearn={autoLearn}
+            brainConfig={brainConfig}
+            brainRuntime={brainRuntime}
+            configureBrain={configureBrain}
             conversationEntries={conversationEntries}
             draft={draft}
-            lastAcquisition={lastAcquisition}
             pendingAction={pendingAction}
             runQuery={runQuery}
-            runAcquisition={runAcquisition}
             selectedTrace={selectedTrace}
             selectedTraceId={selectedTraceId}
             sendMessage={sendMessage}
-            setAcquisitionPolicy={setAcquisitionPolicy}
-            setAcquisitionPreset={setAcquisitionPreset}
-            setAcquisitionOverrides={setAcquisitionOverrides}
             setAutoLearn={setAutoLearn}
+            setBrainConfig={setBrainConfig}
             setDraft={setDraft}
-          />
-        )
-      case 'benchmarks':
-        return (
-          <BenchmarkReportsSection
-            error={benchmarkReportsError}
-            loading={benchmarkReportsLoading}
-            onRefresh={() => refreshBenchmarkReports(true)}
-            reports={benchmarkReports}
+            startBrain={startBrain}
+            stopBrain={stopBrain}
+            tickBrain={tickBrain}
           />
         )
       case 'runtime':
@@ -739,7 +826,7 @@ function App() {
               <div className="space-y-1">
                 <div className="font-medium">HECSN console</div>
                 <div className="text-xs leading-5 text-sidebar-foreground/70">
-                  Evidence-first chat, benchmark plots, and checkpoint control.
+                  Evidence-first chat, Terminus control, and checkpoint state.
                 </div>
               </div>
             </button>
@@ -761,7 +848,6 @@ function App() {
                         <item.icon />
                         <span>{item.label}</span>
                       </SidebarMenuButton>
-                      {item.id === 'benchmarks' && benchmarkReports ? <SidebarMenuBadge>{benchmarkReportCount}</SidebarMenuBadge> : null}
                       {item.id === 'checkpoints' ? <SidebarMenuBadge>{checkpoints.length}</SidebarMenuBadge> : null}
                       {item.id === 'traces' ? <SidebarMenuBadge>{status?.trace_history_size ?? traces.length}</SidebarMenuBadge> : null}
                     </SidebarMenuItem>
@@ -789,8 +875,10 @@ function App() {
                     <span className="font-medium">{status?.token_count?.toLocaleString() || 'n/a'}</span>
                   </div>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sidebar-foreground/70">Benchmarks</span>
-                    <span className="font-medium">{benchmarkReports ? benchmarkReportCount : 'on demand'}</span>
+                    <span className="text-sidebar-foreground/70">Terminus loop</span>
+                    <span className="font-medium">
+                      {brainRuntime?.running ? 'running' : brainRuntime?.configured ? 'idle' : 'unconfigured'}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sidebar-foreground/70">Last trace</span>
@@ -828,7 +916,7 @@ function App() {
                     <div className="space-y-1">
                       <h1 className="text-xl font-medium tracking-tight">HECSN service workspace</h1>
                       <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-                        Ask questions, inspect the selected route, compare benchmark metrics, and manage checkpoints without losing the evidence trail.
+                        Ask questions, inspect the selected route, manage the Terminus runtime, and save checkpoints without losing the evidence trail.
                       </p>
                     </div>
                   </div>

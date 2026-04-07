@@ -135,7 +135,7 @@ export default function TracesSection({
                             <TableRow key={`${item.memory_index}-${index}`}>
                               <TableCell>#{item.memory_index}</TableCell>
                               <TableCell>{formatFloat(item.similarity, 3)}</TableCell>
-                              <TableCell className="whitespace-normal leading-6">{item.text}</TableCell>
+                              <TableCell className="whitespace-normal break-words leading-6">{item.text}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
@@ -170,7 +170,7 @@ export default function TracesSection({
                             {concept.example_windows?.length ? (
                               <div className="mt-3 space-y-2">
                                 {concept.example_windows.map((windowText, index) => (
-                                  <p key={`${concept.label}-${index}`} className="text-sm leading-6 text-muted-foreground">{windowText}</p>
+                                  <p key={`${concept.label}-${index}`} className="break-words text-sm leading-6 text-muted-foreground">{windowText}</p>
                                 ))}
                               </div>
                             ) : null}
