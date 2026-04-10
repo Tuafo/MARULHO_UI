@@ -794,6 +794,7 @@ function App() {
           <AskSection
             activeQuery={activeQuery}
             activeResponse={activeResponse}
+            apiBase={apiBase}
             autoLearn={autoLearn}
             brainConfig={brainConfig}
             brainRuntime={brainRuntime}
@@ -801,6 +802,7 @@ function App() {
             conversationEntries={conversationEntries}
             draft={draft}
             pendingAction={pendingAction}
+            refreshStatus={refreshStatus}
             runQuery={runQuery}
             selectedTrace={selectedTrace}
             selectedTraceId={selectedTraceId}

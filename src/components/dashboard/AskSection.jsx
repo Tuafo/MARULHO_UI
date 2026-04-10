@@ -1,9 +1,12 @@
+import { useState, useEffect, useCallback } from 'react'
 import {
   AlertCircleIcon,
   MessageSquareTextIcon,
+  PlayIcon,
   PlusIcon,
   SearchIcon,
   ShieldCheckIcon,
+  SquareIcon,
   Trash2Icon,
 } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts'
@@ -60,9 +63,89 @@ const EVIDENCE_CHART_CONFIG = {
   },
 }
 
+function QuickStartCard({ apiBase, brainRuntime, pendingAction, quickStarting, quickStartError, setQuickStarting, setQuickStartError, stopBrain, refreshStatus }) {
+  const [presets, setPresets] = useState([])
+  const [selectedPreset, setSelectedPreset] = useState('wikipedia')
+
+  useEffect(() => {
+    if (!apiBase) return
+    fetch(`${apiBase}/terminus/presets`)
+      .then((r) => r.json())
+      .then((data) => { if (Array.isArray(data)) setPresets(data) })
+      .catch(() => {})
+  }, [apiBase])
+
+  const handleQuickStart = useCallback(async () => {
+    setQuickStarting(true)
+    setQuickStartError('')
+    try {
+      const resp = await fetch(`${apiBase}/terminus/quick-start?preset=${encodeURIComponent(selectedPreset)}`, { method: 'POST' })
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}))
+        throw new Error(body.detail || `HTTP ${resp.status}`)
+      }
+      if (refreshStatus) refreshStatus()
+    } catch (err) {
+      setQuickStartError(err.message || 'Quick start failed')
+    } finally {
+      setQuickStarting(false)
+    }
+  }, [apiBase, selectedPreset, setQuickStarting, setQuickStartError, refreshStatus])
+
+  const isRunning = brainRuntime?.running
+  const selectedInfo = presets.find((p) => p.id === selectedPreset)
+
+  return (
+    <div className="rounded-md border border-primary/20 bg-primary/5 p-3 space-y-2">
+      <div className="flex items-center gap-2 text-xs font-semibold text-primary uppercase tracking-wide">
+        <PlayIcon className="size-3.5" /> Quick Start
+      </div>
+      <div className="flex items-center gap-2">
+        <Select value={selectedPreset} onValueChange={setSelectedPreset} disabled={isRunning || quickStarting}>
+          <SelectTrigger className="w-48 h-9 text-sm">
+            <SelectValue placeholder="Choose preset…" />
+          </SelectTrigger>
+          <SelectContent>
+            {presets.map((p) => (
+              <SelectItem key={p.id} value={p.id}>{p.label} ({p.source_count} src{p.source_count > 1 ? 's' : ''})</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {isRunning ? (
+          <Button variant="destructive" size="sm" onClick={stopBrain} disabled={Boolean(pendingAction)}>
+            <SquareIcon className="mr-1 size-3.5" /> Stop
+          </Button>
+        ) : (
+          <Button size="sm" onClick={handleQuickStart} disabled={quickStarting || Boolean(pendingAction)}>
+            <PlayIcon className="mr-1 size-3.5" /> {quickStarting ? 'Starting…' : 'Start Training'}
+          </Button>
+        )}
+      </div>
+      {selectedInfo && !isRunning ? (
+        <p className="text-xs text-muted-foreground">{selectedInfo.description}</p>
+      ) : null}
+      {isRunning ? (
+        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1"><span className="size-2 rounded-full bg-green-500 animate-pulse" /> Live</span>
+          <span>Ticks: {brainRuntime?.tick_count ?? 0}</span>
+          <span>Tokens: {brainRuntime?.tokens_trained ?? 0}</span>
+          {brainRuntime?.last_tick_duration_ms != null ? <span>Last tick: {formatFloat(brainRuntime.last_tick_duration_ms, 1)}ms</span> : null}
+        </div>
+      ) : null}
+      {quickStartError ? (
+        <Alert variant="destructive" className="py-2">
+          <AlertCircleIcon className="size-3.5" />
+          <AlertDescription className="text-xs">{quickStartError}</AlertDescription>
+        </Alert>
+      ) : null}
+    </div>
+  )
+}
+
 export default function AskSection({
   activeQuery,
   activeResponse,
+  apiBase,
   autoLearn,
   brainConfig,
   brainRuntime,
@@ -70,6 +153,7 @@ export default function AskSection({
   conversationEntries,
   draft,
   pendingAction,
+  refreshStatus,
   runQuery,
   selectedTrace,
   selectedTraceId,
@@ -81,6 +165,8 @@ export default function AskSection({
   stopBrain,
   tickBrain,
 }) {
+  const [quickStarting, setQuickStarting] = useState(false)
+  const [quickStartError, setQuickStartError] = useState('')
   const candidateData = (activeQuery?.query_summary?.top_candidates || []).map((candidate) => ({
     label: `C${candidate.column_id}`,
     shard: `Shard ${candidate.shard_id}`,
@@ -307,6 +393,18 @@ export default function AskSection({
                   {brainRuntime?.running ? 'running' : brainRuntime?.configured ? 'configured' : 'unconfigured'}
                 </Badge>
               </div>
+
+              <QuickStartCard
+                apiBase={apiBase}
+                brainRuntime={brainRuntime}
+                pendingAction={pendingAction}
+                quickStarting={quickStarting}
+                quickStartError={quickStartError}
+                setQuickStarting={setQuickStarting}
+                setQuickStartError={setQuickStartError}
+                stopBrain={stopBrain}
+                refreshStatus={refreshStatus}
+              />
 
               {brainRuntime?.last_error ? (
                 <Alert variant="destructive">
