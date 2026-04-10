@@ -2,7 +2,9 @@ import {
   ActivityIcon,
   DatabaseIcon,
   HardDriveIcon,
+  LinkIcon,
   ShieldCheckIcon,
+  ZapIcon,
 } from 'lucide-react'
 import {
   Area,
@@ -33,6 +35,7 @@ import {
 import {
   fixedUnitDomain,
   formatCompactNumber,
+  formatFloat,
   formatPercent,
   nicePositiveDomain,
 } from '@/lib/dashboard-utils'
@@ -89,6 +92,10 @@ function buildTelemetryWindow(telemetryData) {
 export default function OverviewSection({ activeResponse, checkpointName, memoryStore, status, telemetryData }) {
   const tokenDomain = nicePositiveDomain(telemetryData.map((item) => item.tokens), 1000)
   const windowedTelemetryData = buildTelemetryWindow(telemetryData)
+  const animation = status?.animation || {}
+  const crossModal = animation.cross_modal
+  const contextTau = animation.context_tau
+  const runtimeScope = status?.runtime_scope || {}
 
   return (
     <section id="overview" className="space-y-4">
@@ -135,6 +142,114 @@ export default function OverviewSection({ activeResponse, checkpointName, memory
           badge={<Badge variant={status?.dirty_state ? 'outline' : 'secondary'}>{status?.dirty_state ? 'dirty' : 'aligned'}</Badge>}
           help="This is the snapshot the runtime started from. The name is not a score. What matters is whether the runtime still matches it or has unsaved changes."
         />
+      </div>
+
+      {/* V4 feature indicators */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card size="sm" className="bg-card/90">
+          <CardHeader className="border-b">
+            <div className="flex items-start gap-3">
+              <div className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                <LinkIcon className="size-4" />
+              </div>
+              <div className="space-y-1">
+                <CardTitle>Cross-modal grounding</CardTitle>
+                <CardDescription>Visual and audio confidence from the grounding layer.</CardDescription>
+              </div>
+            </div>
+            <CardAction>
+              <HelpTip>Shows how confident the cross-modal grounding channels are. Higher means the model has stronger multi-sensory binding.</HelpTip>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            {crossModal ? (
+              <div className="flex items-end gap-6">
+                <div>
+                  <p className="text-xs text-muted-foreground">Visual</p>
+                  <p className="text-2xl font-semibold">{formatFloat(crossModal.visual_confidence, 3)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Audio</p>
+                  <p className="text-2xl font-semibold">{formatFloat(crossModal.audio_confidence, 3)}</p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Cross-modal layer not active</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card size="sm" className="bg-card/90">
+          <CardHeader className="border-b">
+            <div className="flex items-start gap-3">
+              <div className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                <ZapIcon className="size-4" />
+              </div>
+              <div className="space-y-1">
+                <CardTitle>Adaptive context τ</CardTitle>
+                <CardDescription>Learned time constants for the recurrent attractor context.</CardDescription>
+              </div>
+            </div>
+            <CardAction>
+              <HelpTip>Each context unit has its own learned time constant (tau). Smaller tau means faster context decay, larger tau means longer memory. Healthy systems show a spread of values.</HelpTip>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            {contextTau && contextTau.length > 0 ? (
+              <div className="space-y-2">
+                <div className="flex items-end gap-6">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Mean τ</p>
+                    <p className="text-2xl font-semibold">{formatFloat(contextTau.reduce((a, b) => a + b, 0) / contextTau.length, 3)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Range</p>
+                    <p className="text-sm font-medium">{formatFloat(Math.min(...contextTau), 2)} – {formatFloat(Math.max(...contextTau), 2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Units</p>
+                    <p className="text-sm font-medium">{contextTau.length}</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Context layer not active</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card size="sm" className="bg-card/90">
+          <CardHeader className="border-b">
+            <div className="flex items-start gap-3">
+              <div className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                <ActivityIcon className="size-4" />
+              </div>
+              <div className="space-y-1">
+                <CardTitle>Plasticity circuit</CardTitle>
+                <CardDescription>Active synaptic learning rule and consolidation mode.</CardDescription>
+              </div>
+            </div>
+            <CardAction>
+              <HelpTip>Shows which plasticity pathway is active. local_stdp with triplet traces and tag/PRP consolidation is the v4 target.</HelpTip>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant={runtimeScope.supports_local_log_stdp ? 'secondary' : 'outline'}>
+                {runtimeScope.plasticity_mode || 'n/a'}
+              </Badge>
+              {runtimeScope.uses_adex_post_spikes && (
+                <Badge variant="secondary">AdEx spikes</Badge>
+              )}
+              <Badge variant={runtimeScope.supports_stc_like_memory_consolidation ? 'secondary' : 'outline'}>
+                {runtimeScope.memory_consolidation_mode || 'no consolidation'}
+              </Badge>
+              {runtimeScope.supports_inhibitory_balance && (
+                <Badge variant="secondary">iSTDP balance</Badge>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">

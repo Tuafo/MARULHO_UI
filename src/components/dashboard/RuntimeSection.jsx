@@ -113,7 +113,49 @@ export default function RuntimeSection({ checkpointMetadata, columnInputWeights,
               <Badge variant={runtimeScope.validates_full_log_stdp_weight_target ? 'secondary' : 'outline'}>
                 full synaptic validation {runtimeScope.validates_full_log_stdp_weight_target ? 'on' : 'off'}
               </Badge>
+              <Badge variant={runtimeScope.supports_local_log_stdp ? 'secondary' : 'outline'}>
+                local log-STDP {runtimeScope.supports_local_log_stdp ? 'on' : 'off'}
+              </Badge>
+              <Badge variant={runtimeScope.supports_inhibitory_balance ? 'secondary' : 'outline'}>
+                iSTDP balance {runtimeScope.supports_inhibitory_balance ? 'on' : 'off'}
+              </Badge>
+              <Badge variant={runtimeScope.uses_adex_post_spikes ? 'secondary' : 'outline'}>
+                AdEx spikes {runtimeScope.uses_adex_post_spikes ? 'on' : 'off'}
+              </Badge>
+              <Badge variant={runtimeScope.supports_stc_like_memory_consolidation ? 'secondary' : 'outline'}>
+                STC consolidation {runtimeScope.supports_stc_like_memory_consolidation ? 'on' : 'off'}
+              </Badge>
+              <Badge variant={runtimeScope.supports_first_class_abstraction ? 'secondary' : 'outline'}>
+                abstraction layer {runtimeScope.supports_first_class_abstraction ? 'on' : 'off'}
+              </Badge>
+              <Badge variant={runtimeScope.supports_approximate_attractor_context ? 'secondary' : 'outline'}>
+                attractor context {runtimeScope.supports_approximate_attractor_context ? 'on' : 'off'}
+              </Badge>
             </div>
+
+            {(runtimeScope.context_architecture || runtimeScope.abstraction_architecture || runtimeScope.binding_architecture) && (
+              <div className="grid gap-2 sm:grid-cols-3 rounded-lg border bg-muted/10 p-3">
+                {runtimeScope.context_architecture && (
+                  <div className="space-y-0.5">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Context</p>
+                    <p className="text-xs font-medium">{runtimeScope.context_architecture.replaceAll('_', ' ')}</p>
+                  </div>
+                )}
+                {runtimeScope.abstraction_architecture && (
+                  <div className="space-y-0.5">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Abstraction</p>
+                    <p className="text-xs font-medium">{runtimeScope.abstraction_architecture.replaceAll('_', ' ')}</p>
+                  </div>
+                )}
+                {runtimeScope.binding_architecture && (
+                  <div className="space-y-0.5">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Binding</p>
+                    <p className="text-xs font-medium">{runtimeScope.binding_architecture.replaceAll('_', ' ')}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="rounded-lg border bg-muted/10 p-4 text-sm leading-6 text-muted-foreground">
               {runtimeScope.reason || weightDistribution.reason || 'No additional runtime note was reported.'}
             </div>

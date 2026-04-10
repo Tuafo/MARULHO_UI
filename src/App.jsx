@@ -1,11 +1,15 @@
 import { lazy, Suspense, startTransition, useCallback, useEffect, useRef, useState } from 'react'
 import {
+  ActivityIcon,
   AlertCircleIcon,
   ArchiveIcon,
   BarChart3Icon,
   BrainIcon,
   CpuIcon,
+  FlaskConicalIcon,
+  GraduationCapIcon,
   HistoryIcon,
+  LayersIcon,
   LoaderCircleIcon,
   MessageSquareTextIcon,
   ShieldCheckIcon,
@@ -50,6 +54,10 @@ const AskSection = lazy(() => import('@/components/dashboard/AskSection'))
 const RuntimeSection = lazy(() => import('@/components/dashboard/RuntimeSection'))
 const CheckpointsSection = lazy(() => import('@/components/dashboard/CheckpointsSection'))
 const TracesSection = lazy(() => import('@/components/dashboard/TracesSection'))
+const ArchitectureSection = lazy(() => import('@/components/dashboard/ArchitectureSection'))
+const AnimationSection = lazy(() => import('@/components/dashboard/AnimationSection'))
+const GroundingProbeSection = lazy(() => import('@/components/dashboard/GroundingProbeSection'))
+const DevelopmentalSection = lazy(() => import('@/components/dashboard/DevelopmentalSection'))
 
 const SECTIONS = [
   {
@@ -59,16 +67,40 @@ const SECTIONS = [
     help: 'Live summary cards and stable telemetry charts.',
   },
   {
+    id: 'architecture',
+    label: 'Architecture',
+    icon: LayersIcon,
+    help: 'SVG diagram of the active model layers and their configuration.',
+  },
+  {
+    id: 'animation',
+    label: 'Activity',
+    icon: ActivityIcon,
+    help: 'Live spike flow, column activations, neuromodulators, and memory state.',
+  },
+  {
     id: 'ask',
     label: 'Ask',
     icon: MessageSquareTextIcon,
     help: 'Inspect routing, evidence, and grounded answers.',
   },
   {
+    id: 'grounding',
+    label: 'Grounding',
+    icon: FlaskConicalIcon,
+    help: 'Run the 50-triple grounding probe and view concrete vs abstract accuracy.',
+  },
+  {
     id: 'runtime',
     label: 'Runtime',
     icon: CpuIcon,
     help: 'Model, memory, and routing internals for the active checkpoint.',
+  },
+  {
+    id: 'developmental',
+    label: 'Developmental',
+    icon: GraduationCapIcon,
+    help: 'Stage progress, plasticity mode, and maturity indicators.',
   },
   {
     id: 'checkpoints',
@@ -86,8 +118,12 @@ const SECTIONS = [
 
 const SECTION_TITLES = {
   overview: 'Loading overview',
+  architecture: 'Loading architecture',
+  animation: 'Loading activity monitor',
   ask: 'Loading ask workspace',
+  grounding: 'Loading grounding probe',
   runtime: 'Loading runtime details',
+  developmental: 'Loading developmental stages',
   checkpoints: 'Loading checkpoints',
   traces: 'Loading traces',
 }
@@ -739,6 +775,20 @@ function App() {
 
   function renderActiveSection() {
     switch (activeSection) {
+      case 'architecture':
+        return (
+          <ArchitectureSection
+            apiBase={apiBase}
+            animationData={status?.animation || null}
+          />
+        )
+      case 'animation':
+        return (
+          <AnimationSection
+            animationData={status?.animation || null}
+            telemetry={status}
+          />
+        )
       case 'ask':
         return (
           <AskSection
@@ -763,6 +813,10 @@ function App() {
             tickBrain={tickBrain}
           />
         )
+      case 'grounding':
+        return (
+          <GroundingProbeSection apiBase={apiBase} />
+        )
       case 'runtime':
         return (
           <RuntimeSection
@@ -773,6 +827,13 @@ function App() {
             runtimeScope={runtimeScope}
             status={status}
             weightDistribution={weightDistribution}
+          />
+        )
+      case 'developmental':
+        return (
+          <DevelopmentalSection
+            runtimeScope={runtimeScope}
+            status={status}
           />
         )
       case 'checkpoints':
