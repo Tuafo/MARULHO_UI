@@ -289,6 +289,7 @@ function App() {
     memoryFill: Number(item.memory_store?.slow_buffer_fill_fraction ?? item.memory_fill_fraction ?? 0),
     driftFloor: Number(item.drift_floor ?? item.drift ?? 0),
     dopamine: Number(item.dopamine ?? 0),
+    serotonin: Number(item.serotonin ?? 0),
     acetylcholine: Number(item.acetylcholine ?? 0),
     norepinephrine: Number(item.norepinephrine ?? 0),
   }))

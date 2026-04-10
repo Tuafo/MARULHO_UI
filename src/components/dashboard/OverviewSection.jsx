@@ -65,6 +65,10 @@ const REGULATOR_CHART_CONFIG = {
     label: 'Dopamine',
     color: 'var(--chart-1)',
   },
+  serotonin: {
+    label: 'Serotonin',
+    color: 'var(--chart-2)',
+  },
   acetylcholine: {
     label: 'Acetylcholine',
     color: 'var(--chart-3)',
@@ -221,7 +225,7 @@ export default function OverviewSection({ activeResponse, checkpointName, memory
             <CardTitle>Novelty signals</CardTitle>
             <CardDescription>Fast read of the surprise regulators driving the current session.</CardDescription>
             <CardAction>
-              <HelpTip>These are the system's change signals. Dopamine reacts to better or worse than expected results, acetylcholine reacts to new input, and norepinephrine reacts to strong surprise. Healthy runs usually move around instead of staying stuck. If norepinephrine stays very high, the system is under stress.</HelpTip>
+              <HelpTip>These are the system's change signals. Dopamine reacts to better-than-expected learning pressure, serotonin to worse-than-expected inhibitory pressure, acetylcholine to expected uncertainty and novelty, and norepinephrine to strong unexpected surprise. Healthy runs usually move around instead of staying stuck. If norepinephrine stays very high, the system is under stress.</HelpTip>
             </CardAction>
           </CardHeader>
           <CardContent>
@@ -242,6 +246,7 @@ export default function OverviewSection({ activeResponse, checkpointName, memory
                   <ChartTooltip content={<ChartTooltipContent labelFormatter={(value) => `Sample ${value}`} />} />
                   <ChartLegend content={<ChartLegendContent />} />
                   <Line type="linear" dataKey="dopamine" stroke="var(--color-dopamine)" strokeWidth={2} dot={false} isAnimationActive={false} />
+                  <Line type="linear" dataKey="serotonin" stroke="var(--color-serotonin)" strokeWidth={2} dot={false} isAnimationActive={false} />
                   <Line type="linear" dataKey="acetylcholine" stroke="var(--color-acetylcholine)" strokeWidth={2} dot={false} isAnimationActive={false} />
                   <Line type="linear" dataKey="norepinephrine" stroke="var(--color-norepinephrine)" strokeWidth={2} dot={false} isAnimationActive={false} />
                 </LineChart>

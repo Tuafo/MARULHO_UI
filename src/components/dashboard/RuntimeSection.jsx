@@ -66,7 +66,9 @@ export default function RuntimeSection({ checkpointMetadata, columnInputWeights,
             <CardDescription>The structure that makes fast nearest-neighbor routing possible.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">
+            <DetailItem label="Backend mode" value={runtimeScope.routing_backend_mode || 'n/a'} help="The requested routing backend family. Auto picks a backend based on the current device, while explicit modes pin the runtime to a specific path." />
             <DetailItem label="Index type" value={routingIndex.index_type || 'n/a'} help="The kind of lookup structure used for routing. It affects speed and memory use more than quality by itself." />
+            <DetailItem label="Search device" value={routingIndex.search_device || 'n/a'} help="Which device executes the routing lookup itself. CPU here means the current environment is not yet proving device-side GPU routing." />
             <DetailItem label="Shards" value={routingIndex.n_shards ?? 'n/a'} help="How many pieces the routing index is split into. More shards can help scale, but too many can make balancing harder."
             />
             <DetailItem label="Raw entries" value={routingIndex.raw_entries ?? 'n/a'} help="Total routing entries added to the index, including duplicates or entries that may later be compacted." />

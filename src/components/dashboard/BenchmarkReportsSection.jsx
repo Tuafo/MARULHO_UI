@@ -330,7 +330,7 @@ function ContextualRoutingPanel({ benchmark }) {
           </ChartContainer>
         </BenchmarkCard>
 
-        <BenchmarkCard title="Mean regulator levels" description="Average surprise-style regulators observed during the same contextual-routing benchmark." help="These are average change signals. Acetylcholine tracks newness, dopamine tracks better or worse than expected outcomes, and norepinephrine tracks pressure to reset. Healthy runs move, but do not stay pinned at extremes.">
+        <BenchmarkCard title="Mean regulator levels" description="Average surprise-style regulators observed during the same contextual-routing benchmark." help="These are average change signals. Dopamine tracks better-than-expected learning pressure, serotonin tracks inhibitory pressure when prediction worsens, acetylcholine tracks expected uncertainty and novelty, and norepinephrine tracks reset pressure under unexpected uncertainty. Healthy runs move, but do not stay pinned at extremes.">
           <ChartContainer config={CONTEXTUAL_ROUTING_REGULATOR_CONFIG} className={CHART_CLASS}>
             <BarChart data={benchmark.regulator_series || []} margin={{ left: 4, right: 12, top: 8, bottom: 0 }}>
               <CartesianGrid vertical={false} />
