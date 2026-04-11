@@ -138,25 +138,25 @@ export default function RuntimeSection({ checkpointMetadata, columnInputWeights,
                 {runtimeScope.context_architecture && (
                   <div className="space-y-0.5">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Context</p>
-                    <p className="text-xs font-medium">{runtimeScope.context_architecture.replaceAll('_', ' ')}</p>
+                    <p className="text-xs font-medium truncate">{runtimeScope.context_architecture.replaceAll('_', ' ')}</p>
                   </div>
                 )}
                 {runtimeScope.abstraction_architecture && (
                   <div className="space-y-0.5">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Abstraction</p>
-                    <p className="text-xs font-medium">{runtimeScope.abstraction_architecture.replaceAll('_', ' ')}</p>
+                    <p className="text-xs font-medium truncate">{runtimeScope.abstraction_architecture.replaceAll('_', ' ')}</p>
                   </div>
                 )}
                 {runtimeScope.binding_architecture && (
                   <div className="space-y-0.5">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Binding</p>
-                    <p className="text-xs font-medium">{runtimeScope.binding_architecture.replaceAll('_', ' ')}</p>
+                    <p className="text-xs font-medium truncate">{runtimeScope.binding_architecture.replaceAll('_', ' ')}</p>
                   </div>
                 )}
               </div>
             )}
 
-            <div className="rounded-lg border bg-muted/10 p-4 text-sm leading-6 text-muted-foreground">
+            <div className="rounded-lg border bg-muted/10 p-4 text-sm leading-6 text-muted-foreground break-words">
               {runtimeScope.reason || weightDistribution.reason || 'No additional runtime note was reported.'}
             </div>
           </CardContent>

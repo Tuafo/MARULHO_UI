@@ -421,7 +421,7 @@ function App() {
     }
 
     const connect = () => {
-      source = new EventSource(`${apiBase}/stream/status`)
+      source = new EventSource(`${apiBase}/stream/status?interval=0.5`)
 
       source.addEventListener('status', (event) => {
         const payload = JSON.parse(event.data)
@@ -930,9 +930,9 @@ function App() {
                       {streamConnected ? 'live' : 'reconnecting'}
                     </Badge>
                   </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sidebar-foreground/70">Checkpoint</span>
-                    <span className="max-w-28 truncate font-medium">{checkpointName}</span>
+                  <div className="flex min-w-0 items-center justify-between gap-2">
+                    <span className="shrink-0 text-sidebar-foreground/70">Checkpoint</span>
+                    <span className="truncate font-medium">{checkpointName}</span>
                   </div>
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sidebar-foreground/70">Tokens</span>
@@ -944,9 +944,9 @@ function App() {
                       {brainRuntime?.running ? 'running' : brainRuntime?.configured ? 'idle' : 'unconfigured'}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sidebar-foreground/70">Last trace</span>
-                    <span className="max-w-28 truncate font-medium">{formatWhen(status?.last_trace_created_at)}</span>
+                  <div className="flex min-w-0 items-center justify-between gap-2">
+                    <span className="shrink-0 text-sidebar-foreground/70">Last trace</span>
+                    <span className="truncate font-medium">{formatWhen(status?.last_trace_created_at)}</span>
                   </div>
                 </div>
               </SidebarGroupContent>

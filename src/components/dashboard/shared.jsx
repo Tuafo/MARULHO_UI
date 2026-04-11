@@ -80,7 +80,7 @@ function DetailItem({ help, label, mono = false, value }) {
         <span>{label}</span>
         {help ? <HelpTip>{help}</HelpTip> : null}
       </div>
-      <div className={cn('text-sm font-medium leading-5', mono && 'font-mono text-xs')}>{value}</div>
+      <div className={cn('text-sm font-medium leading-5 break-words', mono && 'font-mono text-xs')}>{value}</div>
     </div>
   )
 }

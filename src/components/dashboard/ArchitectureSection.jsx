@@ -90,10 +90,14 @@ function ConnectionArrow({ fromY, toY, x, enabled }) {
 
 export default function ArchitectureSection({ apiBase, animationData }) {
   const { data: architecture, loading, error, execute: fetchArchitecture } = useApiCall(apiBase, '/architecture')
+  const [fetched, setFetched] = useState(false)
 
   useEffect(() => {
-    fetchArchitecture()
-  }, [fetchArchitecture])
+    if (!fetched && apiBase) {
+      setFetched(true)
+      fetchArchitecture()
+    }
+  }, [apiBase, fetched, fetchArchitecture])
 
   if (loading && !architecture) {
     return (
