@@ -5,6 +5,7 @@ import {
   ArchiveIcon,
   BarChart3Icon,
   BrainIcon,
+  BoxIcon,
   CpuIcon,
   FlaskConicalIcon,
   GraduationCapIcon,
@@ -12,6 +13,7 @@ import {
   LayersIcon,
   LoaderCircleIcon,
   MessageSquareTextIcon,
+  SettingsIcon,
   ShieldCheckIcon,
   TrendingUpIcon,
   WifiIcon,
@@ -49,6 +51,7 @@ import {
   normalizeApiBase,
 } from '@/lib/dashboard-utils'
 import { requestJson } from '@/lib/service-api'
+import { useTelemetryStore } from '@/stores/telemetryStore'
 
 const OverviewSection = lazy(() => import('@/components/dashboard/OverviewSection'))
 const AskSection = lazy(() => import('@/components/dashboard/AskSection'))
@@ -57,6 +60,7 @@ const CheckpointsSection = lazy(() => import('@/components/dashboard/Checkpoints
 const TracesSection = lazy(() => import('@/components/dashboard/TracesSection'))
 const ArchitectureSection = lazy(() => import('@/components/dashboard/ArchitectureSection'))
 const AnimationSection = lazy(() => import('@/components/dashboard/AnimationSection'))
+const NeuralSpaceSection = lazy(() => import('@/components/dashboard/NeuralSpace3D'))
 const GroundingProbeSection = lazy(() => import('@/components/dashboard/GroundingProbeSection'))
 const DevelopmentalSection = lazy(() => import('@/components/dashboard/DevelopmentalSection'))
 const TrainingSection = lazy(() => import('@/components/dashboard/TrainingSection'))
@@ -79,6 +83,12 @@ const SECTIONS = [
     label: 'Activity',
     icon: ActivityIcon,
     help: 'Live spike flow, column activations, neuromodulators, and memory state.',
+  },
+  {
+    id: 'neuralspace',
+    label: 'Neural Space',
+    icon: BoxIcon,
+    help: '3D WebGL visualization of the neural network — columns, spikes, and cross-modal beams in real time.',
   },
   {
     id: 'training',
@@ -125,16 +135,17 @@ const SECTIONS = [
 ]
 
 const SECTION_TITLES = {
-  overview: 'Loading overview',
-  architecture: 'Loading architecture',
-  animation: 'Loading activity monitor',
-  training: 'Loading training monitor',
-  ask: 'Loading ask workspace',
-  grounding: 'Loading grounding probe',
-  runtime: 'Loading runtime details',
-  developmental: 'Loading developmental stages',
-  checkpoints: 'Loading checkpoints',
-  traces: 'Loading traces',
+  overview: 'Overview',
+  architecture: 'Architecture',
+  animation: 'Activity Monitor',
+  neuralspace: 'Neural Space',
+  training: 'Training Monitor',
+  ask: 'Ask Workspace',
+  grounding: 'Grounding Probe',
+  runtime: 'Runtime Details',
+  developmental: 'Developmental Stages',
+  checkpoints: 'Checkpoints',
+  traces: 'Traces',
 }
 
 let sourceDraftCounter = 0
@@ -290,6 +301,7 @@ function App() {
   const [telemetryHistory, setTelemetryHistory] = useState([])
   const [streamConnected, setStreamConnected] = useState(false)
   const [activeSection, setActiveSection] = useState('overview')
+  const [showConfig, setShowConfig] = useState(false)
   const lastTraceIdRef = useRef('')
   const brainConfigSignatureRef = useRef('')
   const retryDelayRef = useRef(1000)
@@ -438,6 +450,9 @@ function App() {
         setStreamConnected(true)
         setError('')
 
+        // Push to Zustand store (powers 3D scene + future sections)
+        useTelemetryStore.getState().pushTelemetry(payload)
+
         startTransition(() => {
           setStatus((current) => ({ ...(current || {}), ...payload }))
           setTelemetryHistory((history) => [...history, payload].slice(-80))
@@ -483,6 +498,7 @@ function App() {
   async function refreshStatus() {
     try {
       const payload = await requestJson(apiBase, '/status')
+      useTelemetryStore.getState().setStatus(payload)
       startTransition(() => {
         setStatus(payload)
         setSelectedCheckpoint((current) => current || payload.checkpoint_path || '')
@@ -798,6 +814,8 @@ function App() {
             telemetry={status}
           />
         )
+      case 'neuralspace':
+        return <NeuralSpaceSection />
       case 'training':
         return (
           <TrainingSection
@@ -894,27 +912,37 @@ function App() {
     <TooltipProvider>
       <SidebarProvider defaultOpen>
         <Sidebar variant="inset" collapsible="icon">
-          <SidebarHeader className="gap-3 border-b border-sidebar-border/70">
+          <SidebarHeader className="gap-2 border-b border-sidebar-border/50">
             <button
               type="button"
               onClick={() => selectSection('overview')}
-              className="flex w-full items-start gap-3 rounded-lg border border-sidebar-border/70 bg-sidebar-accent/35 p-3 text-left transition-colors hover:bg-sidebar-accent/55"
+              className="flex w-full items-center gap-3 rounded-lg bg-gradient-to-r from-purple-500/10 to-blue-500/10 p-3 text-left transition-all hover:from-purple-500/15 hover:to-blue-500/15"
             >
-              <div className="flex size-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-purple-600 to-blue-600 text-white shadow-md shadow-purple-500/25">
                 <BrainIcon className="size-4" />
               </div>
-              <div className="space-y-1">
-                <div className="font-medium">HECSN console</div>
-                <div className="text-xs leading-5 text-sidebar-foreground/70">
-                  Evidence-first chat, Terminus control, and checkpoint state.
+              <div className="min-w-0">
+                <div className="font-semibold tracking-tight">Terminus</div>
+                <div className="truncate text-[10px] leading-4 text-sidebar-foreground/60">
+                  HECSN Neural Engine
                 </div>
+              </div>
+              {/* Heartbeat dot */}
+              <div className="ml-auto">
+                <div
+                  className={`size-2 rounded-full ${
+                    streamConnected
+                      ? 'animate-pulse bg-emerald-400 shadow-sm shadow-emerald-400/50'
+                      : 'bg-red-400'
+                  }`}
+                />
               </div>
             </button>
           </SidebarHeader>
 
           <SidebarContent>
             <SidebarGroup>
-              <SidebarGroupLabel>Workspace</SidebarGroupLabel>
+              <SidebarGroupLabel className="text-[10px] uppercase tracking-widest">Dashboard</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
                   {SECTIONS.map((item) => (
@@ -924,8 +952,9 @@ function App() {
                         isActive={activeSection === item.id}
                         onClick={() => selectSection(item.id)}
                         tooltip={item.help}
+                        className={activeSection === item.id ? 'bg-sidebar-accent/60' : ''}
                       >
-                        <item.icon />
+                        <item.icon className={activeSection === item.id ? 'text-purple-400' : ''} />
                         <span>{item.label}</span>
                       </SidebarMenuButton>
                       {item.id === 'checkpoints' ? <SidebarMenuBadge>{checkpoints.length}</SidebarMenuBadge> : null}
@@ -936,50 +965,34 @@ function App() {
               </SidebarGroupContent>
             </SidebarGroup>
 
+            <SidebarSeparator />
+
             <SidebarGroup>
-              <SidebarGroupLabel>Quick read</SidebarGroupLabel>
+              <SidebarGroupLabel className="text-[10px] uppercase tracking-widest">System</SidebarGroupLabel>
               <SidebarGroupContent className="px-2 pb-2">
-                <div className="space-y-3 rounded-lg border border-sidebar-border/70 bg-sidebar-accent/25 p-3 text-xs">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sidebar-foreground/70">Connection</span>
-                    <Badge variant={streamConnected ? 'secondary' : 'destructive'}>
-                      {streamConnected ? 'live' : 'reconnecting'}
+                <div className="space-y-2 rounded-lg bg-sidebar-accent/15 p-3 text-xs">
+                  <QuickStatRow label="Status" value={
+                    <Badge variant={streamConnected ? 'secondary' : 'destructive'} className="h-5 text-[10px]">
+                      {streamConnected ? 'live' : 'offline'}
                     </Badge>
-                  </div>
-                  <div className="flex min-w-0 items-center justify-between gap-2">
-                    <span className="shrink-0 text-sidebar-foreground/70">Checkpoint</span>
-                    <span className="truncate font-medium">{checkpointName}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sidebar-foreground/70">Tokens</span>
-                    <span className="font-medium">{status?.token_count?.toLocaleString() || 'n/a'}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sidebar-foreground/70">Terminus loop</span>
-                    <span className="font-medium">
-                      {brainRuntime?.running ? 'running' : brainRuntime?.configured ? 'idle' : 'unconfigured'}
-                    </span>
-                  </div>
-                  <div className="flex min-w-0 items-center justify-between gap-2">
-                    <span className="shrink-0 text-sidebar-foreground/70">Last trace</span>
-                    <span className="truncate font-medium">{formatWhen(status?.last_trace_created_at)}</span>
-                  </div>
+                  } />
+                  <QuickStatRow label="Tokens" value={status?.token_count?.toLocaleString() || '—'} />
+                  <QuickStatRow label="Checkpoint" value={checkpointName} truncate />
+                  <QuickStatRow label="Terminus" value={
+                    brainRuntime?.running ? '● running' : brainRuntime?.configured ? '○ idle' : '— unconfigured'
+                  } />
+                  <QuickStatRow label="Last trace" value={formatWhen(status?.last_trace_created_at)} />
                 </div>
               </SidebarGroupContent>
             </SidebarGroup>
           </SidebarContent>
 
-          <SidebarSeparator />
-
           <SidebarFooter>
-            <div className="space-y-2 rounded-lg border border-sidebar-border/70 bg-sidebar-accent/15 p-3 text-xs text-sidebar-foreground/75">
-              <div className="flex items-center gap-2 font-medium text-sidebar-foreground">
-                <ShieldCheckIcon className="size-3.5" />
-                Strict evidence mode
+            <div className="rounded-lg bg-purple-500/5 p-3 text-xs text-sidebar-foreground/60">
+              <div className="flex items-center gap-1.5 font-medium text-sidebar-foreground/80">
+                <ShieldCheckIcon className="size-3" />
+                Evidence mode
               </div>
-              <p className="leading-5">
-                Replies should only go out when the retrieved memory gives enough support.
-              </p>
             </div>
           </SidebarFooter>
 
@@ -987,41 +1000,50 @@ function App() {
         </Sidebar>
 
         <SidebarInset className="min-w-0 bg-background">
-          <header className="sticky top-0 z-20 border-b bg-background/92 backdrop-blur">
-            <div className="flex flex-col gap-4 px-4 py-4 md:px-6">
-              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                <div className="space-y-3">
-                  <div className="flex items-start gap-3">
-                    <SidebarTrigger className="mt-0.5" />
-                    <div className="space-y-1">
-                      <h1 className="text-xl font-medium tracking-tight">HECSN service workspace</h1>
-                      <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-                        Ask questions, inspect the selected route, manage the Terminus runtime, and save checkpoints without losing the evidence trail.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant={streamConnected ? 'secondary' : 'destructive'}>
-                      {streamConnected ? <WifiIcon className="size-3.5" /> : <WifiOffIcon className="size-3.5" />}
-                      {streamConnected ? 'Status stream live' : 'Status stream reconnecting'}
-                    </Badge>
-                    <Badge variant={status?.dirty_state ? 'outline' : 'secondary'}>
-                      {status?.dirty_state ? 'Unsaved runtime changes' : 'Runtime matches the checkpoint'}
-                    </Badge>
-                    <Badge variant={status?.context_supported ? 'secondary' : 'outline'}>
-                      {status?.context_supported ? 'Context routing available' : 'No context routing in this checkpoint'}
-                    </Badge>
-                  </div>
-                </div>
+          {/* Compact header with KPI strip */}
+          <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur-sm">
+            <div className="flex items-center justify-between gap-4 px-4 py-2.5 md:px-6">
+              <div className="flex items-center gap-3">
+                <SidebarTrigger />
+                <div className="hidden h-5 w-px bg-border sm:block" />
+                <h1 className="text-sm font-semibold tracking-tight sm:text-base">
+                  {SECTION_TITLES[activeSection] || 'Overview'}
+                </h1>
+              </div>
 
-                <div className="grid gap-3 lg:min-w-[40rem] lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      API base
-                      <HelpTip>Where the frontend sends requests. Leave the default local address unless the backend moved.</HelpTip>
-                    </div>
-                    <div className="flex gap-2">
+              {/* KPI strip */}
+              <div className="flex items-center gap-3 text-xs">
+                <KpiChip icon={streamConnected ? WifiIcon : WifiOffIcon} active={streamConnected}>
+                  {streamConnected ? 'Live' : 'Offline'}
+                </KpiChip>
+                <KpiChip icon={ActivityIcon} active={!!status?.token_count}>
+                  {status?.token_count?.toLocaleString() || '0'} tokens
+                </KpiChip>
+                {status?.dirty_state && (
+                  <KpiChip icon={AlertCircleIcon} active={false}>Unsaved</KpiChip>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowConfig(c => !c)}
+                  className="rounded-full border border-border/50 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  title="Toggle config panel"
+                >
+                  <SettingsIcon className="size-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Config bar — collapsible */}
+            {showConfig && (
+              <div className="border-t bg-muted/30 px-4 py-2 md:px-6">
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="min-w-[200px] space-y-1">
+                    <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                      API Base
+                    </label>
+                    <div className="flex gap-1.5">
                       <Input
+                        className="h-8 text-xs"
                         value={apiBaseInput}
                         onChange={(event) => setApiBaseInput(event.target.value)}
                         onKeyDown={(event) => {
@@ -1034,6 +1056,8 @@ function App() {
                       <Button
                         type="button"
                         variant="outline"
+                        size="sm"
+                        className="h-8"
                         onClick={applyApiBase}
                         disabled={normalizeApiBase(apiBaseInput) === apiBase}
                       >
@@ -1041,24 +1065,23 @@ function App() {
                       </Button>
                     </div>
                   </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      Context text
-                      <HelpTip>Optional extra hints that ride along with the next query. Use this to narrow the search space.</HelpTip>
-                    </div>
+                  <div className="min-w-[180px] space-y-1">
+                    <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                      Context
+                    </label>
                     <Input
+                      className="h-8 text-xs"
                       value={contextText}
                       onChange={(event) => setContextText(event.target.value)}
-                      placeholder="Optional context for the next request"
+                      placeholder="Optional query context"
                     />
                   </div>
                 </div>
               </div>
-            </div>
+            )}
           </header>
 
-          <div className="flex flex-1 flex-col gap-6 p-4 md:p-6">
+          <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">
             {error ? (
               <Alert variant="destructive">
                 <AlertCircleIcon className="size-4" />
@@ -1082,6 +1105,26 @@ function App() {
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>
+  )
+}
+
+function QuickStatRow({ label, value, truncate }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-sidebar-foreground/50">{label}</span>
+      <span className={`font-medium ${truncate ? 'max-w-[100px] truncate' : ''}`}>{value}</span>
+    </div>
+  )
+}
+
+function KpiChip({ icon: Icon, active, children }) {
+  return (
+    <div className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 ${
+      active ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' : 'border-border/50 text-muted-foreground'
+    }`}>
+      <Icon className="size-3" />
+      <span className="text-[10px] font-medium">{children}</span>
+    </div>
   )
 }
 
