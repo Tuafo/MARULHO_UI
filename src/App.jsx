@@ -13,6 +13,7 @@ import {
   LoaderCircleIcon,
   MessageSquareTextIcon,
   ShieldCheckIcon,
+  TrendingUpIcon,
   WifiIcon,
   WifiOffIcon,
 } from 'lucide-react'
@@ -58,6 +59,7 @@ const ArchitectureSection = lazy(() => import('@/components/dashboard/Architectu
 const AnimationSection = lazy(() => import('@/components/dashboard/AnimationSection'))
 const GroundingProbeSection = lazy(() => import('@/components/dashboard/GroundingProbeSection'))
 const DevelopmentalSection = lazy(() => import('@/components/dashboard/DevelopmentalSection'))
+const TrainingSection = lazy(() => import('@/components/dashboard/TrainingSection'))
 
 const SECTIONS = [
   {
@@ -77,6 +79,12 @@ const SECTIONS = [
     label: 'Activity',
     icon: ActivityIcon,
     help: 'Live spike flow, column activations, neuromodulators, and memory state.',
+  },
+  {
+    id: 'training',
+    label: 'Training',
+    icon: TrendingUpIcon,
+    help: 'Live training metrics: grounding confidence, reconstruction error, neuromodulator dynamics.',
   },
   {
     id: 'ask',
@@ -120,6 +128,7 @@ const SECTION_TITLES = {
   overview: 'Loading overview',
   architecture: 'Loading architecture',
   animation: 'Loading activity monitor',
+  training: 'Loading training monitor',
   ask: 'Loading ask workspace',
   grounding: 'Loading grounding probe',
   runtime: 'Loading runtime details',
@@ -787,6 +796,13 @@ function App() {
           <AnimationSection
             animationData={status?.animation || null}
             telemetry={status}
+          />
+        )
+      case 'training':
+        return (
+          <TrainingSection
+            status={status}
+            telemetryData={telemetryData}
           />
         )
       case 'ask':
