@@ -46,7 +46,22 @@ function SectionHeading({ title, description, badge }) {
   )
 }
 
-function MetricCard({ badge, description, help, icon: Icon, title, value }) {
+function Sparkline({ data, color = '#3b82f6', width = 80, height = 24 }) {
+  if (!data || data.length < 2) return null
+  const max = Math.max(...data, 0.001)
+  const min = Math.min(...data, 0)
+  const range = max - min || 1
+  const step = width / (data.length - 1)
+  const points = data.map((v, i) => `${i * step},${height - ((v - min) / range) * height}`).join(' ')
+
+  return (
+    <svg width={width} height={height} className="shrink-0">
+      <polyline points={points} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function MetricCard({ badge, description, help, icon: Icon, title, value, sparkline, sparklineColor }) {
   return (
     <Card size="sm" className="bg-card/90">
       <CardHeader className="border-b">
@@ -67,7 +82,10 @@ function MetricCard({ badge, description, help, icon: Icon, title, value }) {
         </CardAction>
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-semibold tracking-tight">{value}</div>
+        <div className="flex items-end justify-between gap-2">
+          <div className="text-2xl font-semibold tracking-tight">{value}</div>
+          {sparkline && <Sparkline data={sparkline} color={sparklineColor} />}
+        </div>
       </CardContent>
     </Card>
   )
@@ -117,4 +135,4 @@ function SectionFallback({ title }) {
   )
 }
 
-export { DetailItem, EmptyState, HelpTip, MetricCard, SectionFallback, SectionHeading }
+export { DetailItem, EmptyState, HelpTip, MetricCard, SectionFallback, SectionHeading, Sparkline }

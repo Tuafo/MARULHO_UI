@@ -5,6 +5,7 @@ import { DetailItem, SectionHeading } from '@/components/dashboard/shared'
 
 export default function RuntimeSection({ checkpointMetadata, columnInputWeights, memoryStore, routingIndex, runtimeScope, status, weightDistribution }) {
   const bindingConjunctionEnabled = runtimeScope.supports_binding_conjunction_memory ?? runtimeScope.supports_binding_coincidence
+  const brain = status?.terminus_runtime
 
   return (
     <section id="runtime" className="space-y-4">
@@ -15,6 +16,25 @@ export default function RuntimeSection({ checkpointMetadata, columnInputWeights,
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {/* Live loop metrics — updates on every SSE event */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              Live loop
+              {brain?.running && <Badge variant="secondary" className="text-[10px] animate-pulse">running</Badge>}
+            </CardTitle>
+            <CardDescription>Real-time training loop counters from the Terminus brain tick.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-2">
+            <DetailItem label="Token count" value={status?.token_count?.toLocaleString?.() ?? 'n/a'} help="Total tokens processed since checkpoint load. This is the global training counter." />
+            <DetailItem label="Tick count" value={brain?.tick_count?.toLocaleString?.() ?? 'n/a'} help="Number of brain ticks executed since the loop started. Each tick processes a batch of tokens." />
+            <DetailItem label="Last tick" value={brain?.last_tick_duration_ms != null ? `${brain.last_tick_duration_ms.toFixed(1)} ms` : 'n/a'} help="How long the most recent tick took to complete. Lower is faster." />
+            <DetailItem label="Tokens / tick" value={brain?.last_tick_token_delta ?? brain?.tick_tokens ?? 'n/a'} help="How many tokens were processed in the last tick." />
+            <DetailItem label="Background tokens" value={brain?.background_tokens_processed?.toLocaleString?.() ?? 'n/a'} help="Total tokens trained by the background Terminus loop since it started." />
+            <DetailItem label="Sleep events" value={`${status?.micro_sleep_events ?? 0} micro · ${status?.deep_sleep_events ?? 0} deep`} help="Micro-sleep is quick maintenance. Deep sleep is full consolidation with memory replay." />
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Runtime basics</CardTitle>

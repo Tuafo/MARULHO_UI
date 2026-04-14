@@ -97,6 +97,9 @@ export default function OverviewSection({ activeResponse, checkpointName, memory
   const contextTau = animation.context_tau
   const runtimeScope = status?.runtime_scope || {}
 
+  const tokenSparkline = telemetryData.slice(-20).map((d) => d.tokens ?? 0)
+  const memorySparkline = telemetryData.slice(-20).map((d) => d.memoryFill ?? 0)
+
   return (
     <section id="overview" className="space-y-4">
       <SectionHeading
@@ -113,6 +116,8 @@ export default function OverviewSection({ activeResponse, checkpointName, memory
           description="How much text the runtime has processed so far."
           badge={<Badge variant="outline">winner {status?.last_winner ?? 'n/a'}</Badge>}
           help="How much text this run has handled. More can mean more learning, but only if answer support stays good and drift stays low. Read it together with Memory fill and Answer support."
+          sparkline={tokenSparkline}
+          sparklineColor="var(--chart-1)"
         />
         <MetricCard
           icon={DatabaseIcon}
@@ -121,6 +126,8 @@ export default function OverviewSection({ activeResponse, checkpointName, memory
           description="How full the slow memory buffer is right now."
           badge={<Badge variant="secondary">{memoryStore.slow_buffer_size ?? status?.memory_buffer_size ?? 0} stored</Badge>}
           help="How full the long-term memory buffer is. Around 50% to 85% is usually comfortable. If it stays near 90% or higher, memory may be getting crowded."
+          sparkline={memorySparkline}
+          sparklineColor="var(--chart-2)"
         />
         <MetricCard
           icon={ShieldCheckIcon}
