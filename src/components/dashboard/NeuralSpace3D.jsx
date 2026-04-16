@@ -404,8 +404,9 @@ function CameraFit({ extent }) {
     if (extent === prevExtent.current) return
     prevExtent.current = extent
     const dist = Math.max(extent * 1.3, 16)
-    camera.position.set(0, extent * 0.35, dist)
-    camera.lookAt(0, 0, 0)
+    // Center between input (Y=7) and memory (Y=-7) layers, shifted up slightly
+    camera.position.set(0, extent * 0.4 + 2, dist)
+    camera.lookAt(0, 0.5, 0)
     camera.updateProjectionMatrix()
   }, [extent, camera])
 

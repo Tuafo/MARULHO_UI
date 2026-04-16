@@ -74,7 +74,7 @@ export const useTelemetryStore = create(
         status: { ...(prev.status || {}), ...payload },
         telemetryHistory: history,
         tokenCount: payload.token_count ?? prev.tokenCount,
-        memoryFill: memoryStore?.slow_buffer_fill_fraction ?? payload.memory_fill_fraction ?? prev.memoryFill,
+        memoryFill: animation?.memory_fill ?? memoryStore?.fill_fraction ?? payload.memory_fill_fraction ?? prev.memoryFill,
         memoryBufferSize: memoryStore?.slow_buffer_size ?? payload.memory_buffer_size ?? prev.memoryBufferSize,
         driftFloor: payload.drift_floor ?? payload.drift ?? prev.driftFloor,
         stateRevision: payload.state_revision ?? prev.stateRevision,
