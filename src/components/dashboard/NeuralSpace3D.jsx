@@ -1,5 +1,5 @@
 import { memo, useRef, useMemo, useEffect, useState, useCallback } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, Text, Billboard } from '@react-three/drei'
 import * as THREE from 'three'
 import { useTelemetryStore } from '@/stores/telemetryStore'
@@ -8,7 +8,6 @@ import { useTelemetryStore } from '@/stores/telemetryStore'
 /*  Constants                                                                  */
 /* -------------------------------------------------------------------------- */
 const LAYER_SPACING = 3.5
-const COLUMN_SPREAD = 1.4
 const BASE_COLOR = new THREE.Color('#1e40af')
 const WINNER_COLOR = new THREE.Color('#a855f7')
 const VISUAL_COLOR = new THREE.Color('#10b981')
@@ -17,9 +16,13 @@ const CONTEXT_COLOR = new THREE.Color('#06b6d4')
 const BINDING_COLOR = new THREE.Color('#8b5cf6')
 const STDP_COLOR = new THREE.Color('#f43f5e')
 const MEMORY_COLOR = new THREE.Color('#22d3ee')
+const LERP_TARGET = new THREE.Color()
 
 const tempObj = new THREE.Object3D()
 const tempColor = new THREE.Color()
+
+// Max columns to render individually — beyond this we sample
+const MAX_VIS_COLUMNS = 512
 
 // Y positions for each layer (top to bottom)
 const LAYER_Y = {
@@ -32,35 +35,41 @@ const LAYER_Y = {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Layout helper                                                              */
+/*  Layout helper — adapts spread to column count                              */
 /* -------------------------------------------------------------------------- */
 function columnLayout(nCols) {
-  const perRow = Math.ceil(Math.sqrt(nCols))
+  const visCols = Math.min(nCols, MAX_VIS_COLUMNS)
+  const perRow = Math.ceil(Math.sqrt(visCols))
+  // Scale spread so the grid never exceeds ~12 units across
+  const maxExtent = 12
+  const spread = Math.min(1.4, maxExtent / Math.max(perRow - 1, 1))
   const positions = []
-  for (let i = 0; i < nCols; i++) {
+  for (let i = 0; i < visCols; i++) {
     const row = Math.floor(i / perRow)
     const col = i % perRow
-    const x = (col - (perRow - 1) / 2) * COLUMN_SPREAD
-    const z = (row - (Math.ceil(nCols / perRow) - 1) / 2) * COLUMN_SPREAD
+    const x = (col - (perRow - 1) / 2) * spread
+    const z = (row - (Math.ceil(visCols / perRow) - 1) / 2) * spread
     positions.push([x, 0, z])
   }
-  return positions
+  const extent = Math.max(perRow * spread, 4)
+  return { positions, extent, visCols, spread }
 }
 
 /* -------------------------------------------------------------------------- */
 /*  Data Flow Particles                                                        */
 /* -------------------------------------------------------------------------- */
-function DataFlowParticles({ fromY, toY, color, count = 12, active = true }) {
+function DataFlowParticles({ fromY, toY, color, count = 12, active = true, extent = 4 }) {
   const meshRef = useRef()
   const phases = useMemo(() => Array.from({ length: count }, () => Math.random()), [count])
+  const radius = extent * 0.15
 
   useFrame((_, delta) => {
     if (!meshRef.current || !active) return
     for (let i = 0; i < count; i++) {
       phases[i] = (phases[i] + delta * (0.3 + i * 0.02)) % 1
       const t = phases[i]
-      const x = Math.sin(t * Math.PI * 2 + i) * 0.8
-      const z = Math.cos(t * Math.PI * 2 + i * 0.7) * 0.8
+      const x = Math.sin(t * Math.PI * 2 + i) * radius
+      const z = Math.cos(t * Math.PI * 2 + i * 0.7) * radius
       const y = fromY + (toY - fromY) * t
       tempObj.position.set(x, y, z)
       tempObj.scale.setScalar(0.04 + 0.02 * Math.sin(t * Math.PI))
@@ -87,9 +96,9 @@ function DataFlowParticles({ fromY, toY, color, count = 12, active = true }) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Column Nodes (instanced)                                                   */
+/*  Column Nodes (instanced) — auto-adapts to column count                     */
 /* -------------------------------------------------------------------------- */
-function ColumnNodes({ visible }) {
+function ColumnNodes({ visible, layout }) {
   const meshRef = useRef()
   const prevWinner = useRef(-1)
   const pulsePhase = useRef(0)
@@ -99,12 +108,16 @@ function ColumnNodes({ visible }) {
   const activations = animation?.activations || []
   const winnerId = animation?.winner_id ?? -1
 
-  const positions = useMemo(() => columnLayout(Math.max(nCols, 1)), [nCols])
-  const colorArray = useMemo(() => new Float32Array(Math.max(nCols, 1) * 3), [nCols])
+  const { positions, visCols, spread } = layout
+  const colorArray = useMemo(() => new Float32Array(Math.max(visCols, 1) * 3), [visCols])
+
+  // Lower geometry detail for large counts
+  const geoDetail = visCols > 256 ? 1 : visCols > 64 ? 2 : 3
+  const sphereRadius = Math.min(0.35, spread * 0.35)
 
   useEffect(() => {
-    if (!meshRef.current || nCols === 0) return
-    for (let i = 0; i < nCols; i++) {
+    if (!meshRef.current || visCols === 0) return
+    for (let i = 0; i < visCols; i++) {
       const [x, , z] = positions[i]
       tempObj.position.set(x, LAYER_Y.columns, z)
       tempObj.scale.set(1, 1, 1)
@@ -112,10 +125,10 @@ function ColumnNodes({ visible }) {
       meshRef.current.setMatrixAt(i, tempObj.matrix)
     }
     meshRef.current.instanceMatrix.needsUpdate = true
-  }, [nCols, positions])
+  }, [visCols, positions])
 
   useFrame((_, delta) => {
-    if (!meshRef.current || nCols === 0 || !visible) return
+    if (!meshRef.current || visCols === 0 || !visible) return
 
     if (winnerId !== prevWinner.current) {
       pulsePhase.current = 0
@@ -123,7 +136,7 @@ function ColumnNodes({ visible }) {
     }
     pulsePhase.current += delta * 4
 
-    for (let i = 0; i < nCols; i++) {
+    for (let i = 0; i < visCols; i++) {
       const act = activations[i] ?? 0
       const intensity = Math.min(act * 2.5, 1)
       const isWinner = i === winnerId
@@ -142,7 +155,9 @@ function ColumnNodes({ visible }) {
       if (isWinner) {
         tempColor.copy(WINNER_COLOR)
       } else {
-        tempColor.copy(BASE_COLOR).lerp(new THREE.Color('#60a5fa'), intensity)
+        tempColor.copy(BASE_COLOR)
+        LERP_TARGET.set(0.376, 0.647, 0.98) // #60a5fa
+        tempColor.lerp(LERP_TARGET, intensity)
       }
       colorArray[i * 3] = tempColor.r
       colorArray[i * 3 + 1] = tempColor.g
@@ -156,11 +171,11 @@ function ColumnNodes({ visible }) {
     )
   })
 
-  if (nCols === 0 || !visible) return null
+  if (visCols === 0 || !visible) return null
 
   return (
-    <instancedMesh ref={meshRef} args={[null, null, nCols]} frustumCulled={false}>
-      <icosahedronGeometry args={[0.35, 3]} />
+    <instancedMesh ref={meshRef} args={[null, null, visCols]} frustumCulled={false}>
+      <icosahedronGeometry args={[sphereRadius, geoDetail]} />
       <meshStandardMaterial
         vertexColors
         emissive="#1e40af"
@@ -175,14 +190,15 @@ function ColumnNodes({ visible }) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Layer slabs                                                                */
+/*  Layer slabs — size adapts to column grid extent                            */
 /* -------------------------------------------------------------------------- */
-function LayerSlab({ position, label, color, emissiveIntensity = 0.15, opacity = 0.4, size = [4, 0.15, 4], visible = true }) {
+function LayerSlab({ position, label, color, emissiveIntensity = 0.15, opacity = 0.4, extent = 4, visible = true }) {
   if (!visible) return null
+  const size = extent + 1
   return (
     <group position={position}>
       <mesh>
-        <boxGeometry args={size} />
+        <boxGeometry args={[size, 0.15, size]} />
         <meshStandardMaterial
           color={new THREE.Color(color).multiplyScalar(0.3)}
           emissive={color}
@@ -191,8 +207,8 @@ function LayerSlab({ position, label, color, emissiveIntensity = 0.15, opacity =
           opacity={opacity}
         />
       </mesh>
-      <Billboard position={[0, 0.5, size[2] / 2 + 0.3]}>
-        <Text fontSize={0.18} color={color} anchorY="bottom">
+      <Billboard position={[0, 0.5, size / 2 + 0.3]}>
+        <Text fontSize={0.22} color={color} anchorY="bottom">
           {label}
         </Text>
       </Billboard>
@@ -200,11 +216,11 @@ function LayerSlab({ position, label, color, emissiveIntensity = 0.15, opacity =
   )
 }
 
-function InputLayer({ visible }) {
-  return <LayerSlab position={[0, LAYER_Y.input, 0]} label="RTF Encoder" color="#3b82f6" visible={visible} />
+function InputLayer({ visible, extent }) {
+  return <LayerSlab position={[0, LAYER_Y.input, 0]} label="RTF Encoder" color="#3b82f6" visible={visible} extent={extent} />
 }
 
-function ContextLayer({ visible }) {
+function ContextLayer({ visible, extent }) {
   const animation = useTelemetryStore((s) => s.animation)
   const contextTau = animation?.context_tau
   const avgTau = contextTau && contextTau.length > 0
@@ -218,11 +234,12 @@ function ContextLayer({ visible }) {
       color="#06b6d4"
       emissiveIntensity={0.1 + Math.min(avgTau, 1) * 0.3}
       visible={visible}
+      extent={extent}
     />
   )
 }
 
-function STDPLayer({ visible }) {
+function STDPLayer({ visible, extent }) {
   const animation = useTelemetryStore((s) => s.animation)
   const stdp = animation?.stdp
 
@@ -232,13 +249,13 @@ function STDPLayer({ visible }) {
       label={`STDP (w=${stdp?.mean_weight?.toFixed(3) ?? '—'})`}
       color="#f43f5e"
       emissiveIntensity={0.12}
-      size={[3.5, 0.12, 3.5]}
       visible={visible}
+      extent={extent * 0.9}
     />
   )
 }
 
-function BindingLayer({ visible }) {
+function BindingLayer({ visible, extent }) {
   const animation = useTelemetryStore((s) => s.animation)
   const binding = animation?.binding
   const nBinding = binding?.n_binding_neurons ?? 0
@@ -250,20 +267,22 @@ function BindingLayer({ visible }) {
       color="#8b5cf6"
       emissiveIntensity={0.15}
       visible={visible}
+      extent={extent}
     />
   )
 }
 
-function MemoryLayer({ visible }) {
+function MemoryLayer({ visible, extent }) {
   const memoryFill = useTelemetryStore((s) => s.memoryFill)
   const fillScale = 0.1 + memoryFill * 0.9
+  const size = extent + 1
 
   if (!visible) return null
 
   return (
     <group position={[0, LAYER_Y.memory, 0]}>
       <mesh>
-        <boxGeometry args={[4, 0.15, 4]} />
+        <boxGeometry args={[size, 0.15, size]} />
         <meshStandardMaterial
           color="#164e63"
           emissive="#22d3ee"
@@ -273,7 +292,7 @@ function MemoryLayer({ visible }) {
         />
       </mesh>
       <mesh position={[0, -0.3, 0]}>
-        <boxGeometry args={[4 * fillScale, 0.1, 4 * fillScale]} />
+        <boxGeometry args={[size * fillScale, 0.1, size * fillScale]} />
         <meshStandardMaterial
           color="#22d3ee"
           emissive="#22d3ee"
@@ -282,8 +301,8 @@ function MemoryLayer({ visible }) {
           opacity={0.5}
         />
       </mesh>
-      <Billboard position={[0, 0.5, 2.3]}>
-        <Text fontSize={0.18} color="#22d3ee" anchorY="bottom">
+      <Billboard position={[0, 0.5, size / 2 + 0.3]}>
+        <Text fontSize={0.22} color="#22d3ee" anchorY="bottom">
           {`Memory (${(memoryFill * 100).toFixed(0)}%)`}
         </Text>
       </Billboard>
@@ -294,17 +313,18 @@ function MemoryLayer({ visible }) {
 /* -------------------------------------------------------------------------- */
 /*  Cross-modal beams                                                          */
 /* -------------------------------------------------------------------------- */
-function CrossModalBeams({ visible }) {
+function CrossModalBeams({ visible, extent }) {
   const crossModal = useTelemetryStore((s) => s.crossModal)
   if (!crossModal || !visible) return null
 
   const vConf = crossModal.visual_confidence || 0
   const aConf = crossModal.audio_confidence || 0
+  const beamX = extent / 2 + 1.5
 
   return (
     <group>
       {vConf > 0.01 && (
-        <group position={[-4, LAYER_Y.columns, 0]}>
+        <group position={[-beamX, LAYER_Y.columns, 0]}>
           <mesh>
             <cylinderGeometry args={[0.04 + vConf * 0.12, 0.04, 1.8, 8]} />
             <meshStandardMaterial
@@ -316,14 +336,14 @@ function CrossModalBeams({ visible }) {
             />
           </mesh>
           <Billboard position={[0, 1.2, 0]}>
-            <Text fontSize={0.16} color="#10b981">
+            <Text fontSize={0.18} color="#10b981">
               {`Visual ${(vConf * 100).toFixed(0)}%`}
             </Text>
           </Billboard>
         </group>
       )}
       {aConf > 0.01 && (
-        <group position={[4, LAYER_Y.columns, 0]}>
+        <group position={[beamX, LAYER_Y.columns, 0]}>
           <mesh>
             <cylinderGeometry args={[0.04 + aConf * 0.12, 0.04, 1.8, 8]} />
             <meshStandardMaterial
@@ -335,7 +355,7 @@ function CrossModalBeams({ visible }) {
             />
           </mesh>
           <Billboard position={[0, 1.2, 0]}>
-            <Text fontSize={0.16} color="#f59e0b">
+            <Text fontSize={0.18} color="#f59e0b">
               {`Audio ${(aConf * 100).toFixed(0)}%`}
             </Text>
           </Billboard>
@@ -366,56 +386,90 @@ function AmbientGlow() {
   return (
     <>
       <ambientLight intensity={0.12} />
-      <pointLight ref={lightRef} position={[0, 8, 0]} intensity={0.5} distance={25} />
-      <pointLight position={[-6, -4, 6]} intensity={0.08} color="#1e3a5f" />
-      <pointLight position={[6, -4, -6]} intensity={0.08} color="#312e81" />
+      <pointLight ref={lightRef} position={[0, 8, 0]} intensity={0.5} distance={35} />
+      <pointLight position={[-8, -4, 8]} intensity={0.08} color="#1e3a5f" />
+      <pointLight position={[8, -4, -8]} intensity={0.08} color="#312e81" />
     </>
   )
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Auto-fit camera to column extent                                           */
+/* -------------------------------------------------------------------------- */
+function CameraFit({ extent }) {
+  const { camera } = useThree()
+  const prevExtent = useRef(0)
+
+  useEffect(() => {
+    if (extent === prevExtent.current) return
+    prevExtent.current = extent
+    const dist = Math.max(extent * 1.3, 16)
+    camera.position.set(0, extent * 0.35, dist)
+    camera.lookAt(0, 0, 0)
+    camera.updateProjectionMatrix()
+  }, [extent, camera])
+
+  return null
 }
 
 /* -------------------------------------------------------------------------- */
 /*  Scene                                                                      */
 /* -------------------------------------------------------------------------- */
 function Scene({ layers }) {
-  const hasData = useTelemetryStore((s) => (s.animation?.n_columns || 0) > 0)
-  const winnerId = useTelemetryStore((s) => s.animation?.winner_id ?? -1)
+  const animation = useTelemetryStore((s) => s.animation)
+  const nCols = animation?.n_columns || 0
+  const winnerId = animation?.winner_id ?? -1
+  const hasData = nCols > 0
+
+  const layout = useMemo(() => columnLayout(Math.max(nCols, 1)), [nCols])
+  const { extent } = layout
 
   return (
     <>
       <AmbientGlow />
+      <CameraFit extent={extent} />
 
-      <InputLayer visible={layers.input} />
-      <ColumnNodes visible={layers.columns} />
-      <ContextLayer visible={layers.context} />
-      <STDPLayer visible={layers.stdp} />
-      <BindingLayer visible={layers.binding} />
-      <MemoryLayer visible={layers.memory} />
-      <CrossModalBeams visible={layers.crossModal} />
+      <InputLayer visible={layers.input} extent={extent} />
+      <ColumnNodes visible={layers.columns} layout={layout} />
+      <ContextLayer visible={layers.context} extent={extent} />
+      <STDPLayer visible={layers.stdp} extent={extent} />
+      <BindingLayer visible={layers.binding} extent={extent} />
+      <MemoryLayer visible={layers.memory} extent={extent} />
+      <CrossModalBeams visible={layers.crossModal} extent={extent} />
 
       {/* Data flow particles between layers */}
       {hasData && layers.input && layers.columns && (
-        <DataFlowParticles fromY={LAYER_Y.input} toY={LAYER_Y.columns} color="#3b82f6" count={8} />
+        <DataFlowParticles fromY={LAYER_Y.input} toY={LAYER_Y.columns} color="#3b82f6" count={8} extent={extent} />
       )}
       {winnerId >= 0 && layers.columns && layers.context && (
-        <DataFlowParticles fromY={LAYER_Y.columns} toY={LAYER_Y.context} color="#a78bfa" count={6} />
+        <DataFlowParticles fromY={LAYER_Y.columns} toY={LAYER_Y.context} color="#a78bfa" count={6} extent={extent} />
       )}
       {winnerId >= 0 && layers.binding && layers.memory && (
-        <DataFlowParticles fromY={LAYER_Y.binding} toY={LAYER_Y.memory} color="#22d3ee" count={6} />
+        <DataFlowParticles fromY={LAYER_Y.binding} toY={LAYER_Y.memory} color="#22d3ee" count={6} extent={extent} />
       )}
 
       {/* Winner label */}
       {winnerId >= 0 && (
         <Billboard position={[0, LAYER_Y.input + 1.2, 0]}>
-          <Text fontSize={0.16} color="#a78bfa">
+          <Text fontSize={0.2} color="#a78bfa">
             {`Winner: #${winnerId}`}
           </Text>
         </Billboard>
       )}
 
+      {/* Column count badge when sampling */}
+      {nCols > MAX_VIS_COLUMNS && (
+        <Billboard position={[0, LAYER_Y.columns + 1.2, 0]}>
+          <Text fontSize={0.18} color="#fbbf24">
+            {`Showing ${MAX_VIS_COLUMNS} of ${nCols.toLocaleString()} columns`}
+          </Text>
+        </Billboard>
+      )}
+
       <OrbitControls
-        enablePan={false}
+        enablePan
         minDistance={5}
-        maxDistance={30}
+        maxDistance={60}
         autoRotate
         autoRotateSpeed={0.2}
         maxPolarAngle={Math.PI * 0.85}
@@ -519,9 +573,9 @@ function NeuralSpace3D() {
   }, [])
 
   return (
-    <div className="relative h-[520px] w-full overflow-hidden rounded-xl border border-border/40 bg-[#030712]">
+    <div className="relative h-[720px] w-full overflow-hidden rounded-xl border border-border/40 bg-[#030712]">
       <Canvas
-        camera={{ position: [0, 4, 16], fov: 50 }}
+        camera={{ position: [0, 5, 20], fov: 50 }}
         dpr={[1, 1.5]}
         frameloop="always"
         gl={{ antialias: true, alpha: false }}
