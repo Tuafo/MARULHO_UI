@@ -1,20 +1,39 @@
-import { memo, useRef, useMemo, useEffect } from 'react'
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { OrbitControls, Stars, Text, Billboard } from '@react-three/drei'
+import { memo, useRef, useMemo, useEffect, useState, useCallback } from 'react'
+import { Canvas, useFrame } from '@react-three/fiber'
+import { OrbitControls, Text, Billboard } from '@react-three/drei'
 import * as THREE from 'three'
 import { useTelemetryStore } from '@/stores/telemetryStore'
 
-const COLUMN_SPREAD = 1.6
-const LAYER_SPACING_Y = 4
+/* -------------------------------------------------------------------------- */
+/*  Constants                                                                  */
+/* -------------------------------------------------------------------------- */
+const LAYER_SPACING = 3.5
+const COLUMN_SPREAD = 1.4
 const BASE_COLOR = new THREE.Color('#1e40af')
 const WINNER_COLOR = new THREE.Color('#a855f7')
 const VISUAL_COLOR = new THREE.Color('#10b981')
 const AUDIO_COLOR = new THREE.Color('#f59e0b')
-const TEXT_COLOR = new THREE.Color('#3b82f6')
+const CONTEXT_COLOR = new THREE.Color('#06b6d4')
+const BINDING_COLOR = new THREE.Color('#8b5cf6')
+const STDP_COLOR = new THREE.Color('#f43f5e')
+const MEMORY_COLOR = new THREE.Color('#22d3ee')
 
 const tempObj = new THREE.Object3D()
 const tempColor = new THREE.Color()
 
+// Y positions for each layer (top to bottom)
+const LAYER_Y = {
+  input: LAYER_SPACING * 2,
+  columns: LAYER_SPACING,
+  context: 0,
+  stdp: -LAYER_SPACING * 0.5,
+  binding: -LAYER_SPACING,
+  memory: -LAYER_SPACING * 2,
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Layout helper                                                              */
+/* -------------------------------------------------------------------------- */
 function columnLayout(nCols) {
   const perRow = Math.ceil(Math.sqrt(nCols))
   const positions = []
@@ -28,9 +47,50 @@ function columnLayout(nCols) {
   return positions
 }
 
-function ColumnNodes() {
+/* -------------------------------------------------------------------------- */
+/*  Data Flow Particles                                                        */
+/* -------------------------------------------------------------------------- */
+function DataFlowParticles({ fromY, toY, color, count = 12, active = true }) {
   const meshRef = useRef()
-  const glowRef = useRef()
+  const phases = useMemo(() => Array.from({ length: count }, () => Math.random()), [count])
+
+  useFrame((_, delta) => {
+    if (!meshRef.current || !active) return
+    for (let i = 0; i < count; i++) {
+      phases[i] = (phases[i] + delta * (0.3 + i * 0.02)) % 1
+      const t = phases[i]
+      const x = Math.sin(t * Math.PI * 2 + i) * 0.8
+      const z = Math.cos(t * Math.PI * 2 + i * 0.7) * 0.8
+      const y = fromY + (toY - fromY) * t
+      tempObj.position.set(x, y, z)
+      tempObj.scale.setScalar(0.04 + 0.02 * Math.sin(t * Math.PI))
+      tempObj.updateMatrix()
+      meshRef.current.setMatrixAt(i, tempObj.matrix)
+    }
+    meshRef.current.instanceMatrix.needsUpdate = true
+  })
+
+  if (!active) return null
+
+  return (
+    <instancedMesh ref={meshRef} args={[null, null, count]} frustumCulled={false}>
+      <sphereGeometry args={[1, 6, 6]} />
+      <meshStandardMaterial
+        color={color}
+        emissive={color}
+        emissiveIntensity={0.8}
+        transparent
+        opacity={0.7}
+      />
+    </instancedMesh>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Column Nodes (instanced)                                                   */
+/* -------------------------------------------------------------------------- */
+function ColumnNodes({ visible }) {
+  const meshRef = useRef()
   const prevWinner = useRef(-1)
   const pulsePhase = useRef(0)
 
@@ -40,14 +100,13 @@ function ColumnNodes() {
   const winnerId = animation?.winner_id ?? -1
 
   const positions = useMemo(() => columnLayout(Math.max(nCols, 1)), [nCols])
-
   const colorArray = useMemo(() => new Float32Array(Math.max(nCols, 1) * 3), [nCols])
 
   useEffect(() => {
     if (!meshRef.current || nCols === 0) return
     for (let i = 0; i < nCols; i++) {
       const [x, , z] = positions[i]
-      tempObj.position.set(x, 0, z)
+      tempObj.position.set(x, LAYER_Y.columns, z)
       tempObj.scale.set(1, 1, 1)
       tempObj.updateMatrix()
       meshRef.current.setMatrixAt(i, tempObj.matrix)
@@ -56,7 +115,7 @@ function ColumnNodes() {
   }, [nCols, positions])
 
   useFrame((_, delta) => {
-    if (!meshRef.current || nCols === 0) return
+    if (!meshRef.current || nCols === 0 || !visible) return
 
     if (winnerId !== prevWinner.current) {
       pulsePhase.current = 0
@@ -69,19 +128,17 @@ function ColumnNodes() {
       const intensity = Math.min(act * 2.5, 1)
       const isWinner = i === winnerId
 
-      // Scale: winner pulses, others scale with activation
-      const baseScale = 0.3 + intensity * 0.5
+      const baseScale = 0.25 + intensity * 0.4
       const scale = isWinner
-        ? baseScale * (1 + 0.2 * Math.sin(pulsePhase.current))
+        ? baseScale * (1 + 0.25 * Math.sin(pulsePhase.current))
         : baseScale
 
       const [x, , z] = positions[i]
-      tempObj.position.set(x, 0, z)
+      tempObj.position.set(x, LAYER_Y.columns, z)
       tempObj.scale.setScalar(scale)
       tempObj.updateMatrix()
       meshRef.current.setMatrixAt(i, tempObj.matrix)
 
-      // Color: winner is purple, others blue→white by activation
       if (isWinner) {
         tempColor.copy(WINNER_COLOR)
       } else {
@@ -99,11 +156,11 @@ function ColumnNodes() {
     )
   })
 
-  if (nCols === 0) return null
+  if (nCols === 0 || !visible) return null
 
   return (
     <instancedMesh ref={meshRef} args={[null, null, nCols]} frustumCulled={false}>
-      <icosahedronGeometry args={[0.4, 3]} />
+      <icosahedronGeometry args={[0.35, 3]} />
       <meshStandardMaterial
         vertexColors
         emissive="#1e40af"
@@ -117,36 +174,96 @@ function ColumnNodes() {
   )
 }
 
-function InputLayer() {
+/* -------------------------------------------------------------------------- */
+/*  Layer slabs                                                                */
+/* -------------------------------------------------------------------------- */
+function LayerSlab({ position, label, color, emissiveIntensity = 0.15, opacity = 0.4, size = [4, 0.15, 4], visible = true }) {
+  if (!visible) return null
   return (
-    <group position={[0, LAYER_SPACING_Y, 0]}>
+    <group position={position}>
       <mesh>
-        <boxGeometry args={[3, 0.3, 3]} />
+        <boxGeometry args={size} />
         <meshStandardMaterial
-          color="#1e3a5f"
-          emissive={TEXT_COLOR}
-          emissiveIntensity={0.15}
+          color={new THREE.Color(color).multiplyScalar(0.3)}
+          emissive={color}
+          emissiveIntensity={emissiveIntensity}
           transparent
-          opacity={0.5}
+          opacity={opacity}
         />
       </mesh>
-      <Billboard position={[0, 0.6, 0]}>
-        <Text fontSize={0.25} color="#60a5fa" anchorY="bottom">
-          RTF Encoder
+      <Billboard position={[0, 0.5, size[2] / 2 + 0.3]}>
+        <Text fontSize={0.18} color={color} anchorY="bottom">
+          {label}
         </Text>
       </Billboard>
     </group>
   )
 }
 
-function MemoryLayer() {
+function InputLayer({ visible }) {
+  return <LayerSlab position={[0, LAYER_Y.input, 0]} label="RTF Encoder" color="#3b82f6" visible={visible} />
+}
+
+function ContextLayer({ visible }) {
+  const animation = useTelemetryStore((s) => s.animation)
+  const contextTau = animation?.context_tau
+  const avgTau = contextTau && contextTau.length > 0
+    ? contextTau.reduce((a, b) => a + b, 0) / contextTau.length
+    : 0
+
+  return (
+    <LayerSlab
+      position={[0, LAYER_Y.context, 0]}
+      label={`Context (τ=${avgTau.toFixed(2)})`}
+      color="#06b6d4"
+      emissiveIntensity={0.1 + Math.min(avgTau, 1) * 0.3}
+      visible={visible}
+    />
+  )
+}
+
+function STDPLayer({ visible }) {
+  const animation = useTelemetryStore((s) => s.animation)
+  const stdp = animation?.stdp
+
+  return (
+    <LayerSlab
+      position={[0, LAYER_Y.stdp, 0]}
+      label={`STDP (w=${stdp?.mean_weight?.toFixed(3) ?? '—'})`}
+      color="#f43f5e"
+      emissiveIntensity={0.12}
+      size={[3.5, 0.12, 3.5]}
+      visible={visible}
+    />
+  )
+}
+
+function BindingLayer({ visible }) {
+  const animation = useTelemetryStore((s) => s.animation)
+  const binding = animation?.binding
+  const nBinding = binding?.n_binding_neurons ?? 0
+
+  return (
+    <LayerSlab
+      position={[0, LAYER_Y.binding, 0]}
+      label={`Binding (${nBinding}n)`}
+      color="#8b5cf6"
+      emissiveIntensity={0.15}
+      visible={visible}
+    />
+  )
+}
+
+function MemoryLayer({ visible }) {
   const memoryFill = useTelemetryStore((s) => s.memoryFill)
   const fillScale = 0.1 + memoryFill * 0.9
 
+  if (!visible) return null
+
   return (
-    <group position={[0, -LAYER_SPACING_Y, 0]}>
+    <group position={[0, LAYER_Y.memory, 0]}>
       <mesh>
-        <boxGeometry args={[3, 0.3, 3]} />
+        <boxGeometry args={[4, 0.15, 4]} />
         <meshStandardMaterial
           color="#164e63"
           emissive="#22d3ee"
@@ -155,40 +272,41 @@ function MemoryLayer() {
           opacity={0.4}
         />
       </mesh>
-      {/* Memory fill indicator */}
-      <mesh position={[0, -0.4, 0]}>
-        <boxGeometry args={[3 * fillScale, 0.15, 3 * fillScale]} />
+      <mesh position={[0, -0.3, 0]}>
+        <boxGeometry args={[4 * fillScale, 0.1, 4 * fillScale]} />
         <meshStandardMaterial
           color="#22d3ee"
           emissive="#22d3ee"
           emissiveIntensity={0.4}
           transparent
-          opacity={0.6}
+          opacity={0.5}
         />
       </mesh>
-      <Billboard position={[0, 0.6, 0]}>
-        <Text fontSize={0.25} color="#22d3ee" anchorY="bottom">
-          {`Memory Store (${(memoryFill * 100).toFixed(0)}%)`}
+      <Billboard position={[0, 0.5, 2.3]}>
+        <Text fontSize={0.18} color="#22d3ee" anchorY="bottom">
+          {`Memory (${(memoryFill * 100).toFixed(0)}%)`}
         </Text>
       </Billboard>
     </group>
   )
 }
 
-function CrossModalBeams() {
+/* -------------------------------------------------------------------------- */
+/*  Cross-modal beams                                                          */
+/* -------------------------------------------------------------------------- */
+function CrossModalBeams({ visible }) {
   const crossModal = useTelemetryStore((s) => s.crossModal)
-  if (!crossModal) return null
+  if (!crossModal || !visible) return null
 
   const vConf = crossModal.visual_confidence || 0
   const aConf = crossModal.audio_confidence || 0
 
   return (
     <group>
-      {/* Visual beam (left) */}
       {vConf > 0.01 && (
-        <group position={[-3.5, 0, 0]}>
+        <group position={[-4, LAYER_Y.columns, 0]}>
           <mesh>
-            <cylinderGeometry args={[0.05 + vConf * 0.15, 0.05, 2, 8]} />
+            <cylinderGeometry args={[0.04 + vConf * 0.12, 0.04, 1.8, 8]} />
             <meshStandardMaterial
               color={VISUAL_COLOR}
               emissive={VISUAL_COLOR}
@@ -197,18 +315,17 @@ function CrossModalBeams() {
               opacity={0.4 + vConf * 0.4}
             />
           </mesh>
-          <Billboard position={[0, 1.5, 0]}>
-            <Text fontSize={0.2} color="#10b981">
+          <Billboard position={[0, 1.2, 0]}>
+            <Text fontSize={0.16} color="#10b981">
               {`Visual ${(vConf * 100).toFixed(0)}%`}
             </Text>
           </Billboard>
         </group>
       )}
-      {/* Audio beam (right) */}
       {aConf > 0.01 && (
-        <group position={[3.5, 0, 0]}>
+        <group position={[4, LAYER_Y.columns, 0]}>
           <mesh>
-            <cylinderGeometry args={[0.05 + aConf * 0.15, 0.05, 2, 8]} />
+            <cylinderGeometry args={[0.04 + aConf * 0.12, 0.04, 1.8, 8]} />
             <meshStandardMaterial
               color={AUDIO_COLOR}
               emissive={AUDIO_COLOR}
@@ -217,8 +334,8 @@ function CrossModalBeams() {
               opacity={0.4 + aConf * 0.4}
             />
           </mesh>
-          <Billboard position={[0, 1.5, 0]}>
-            <Text fontSize={0.2} color="#f59e0b">
+          <Billboard position={[0, 1.2, 0]}>
+            <Text fontSize={0.16} color="#f59e0b">
               {`Audio ${(aConf * 100).toFixed(0)}%`}
             </Text>
           </Billboard>
@@ -228,51 +345,9 @@ function CrossModalBeams() {
   )
 }
 
-function FlowBeams() {
-  const animation = useTelemetryStore((s) => s.animation)
-  const winnerId = animation?.winner_id ?? -1
-  const hasData = (animation?.n_columns || 0) > 0
-  const beamRef = useRef()
-  const phaseRef = useRef(0)
-
-  useFrame((_, delta) => {
-    if (!beamRef.current) return
-    phaseRef.current += delta * 2
-    beamRef.current.material.opacity = 0.15 + 0.1 * Math.sin(phaseRef.current)
-  })
-
-  if (!hasData) return null
-
-  return (
-    <group>
-      {/* Input → Columns beam */}
-      <mesh ref={beamRef} position={[0, LAYER_SPACING_Y / 2, 0]}>
-        <cylinderGeometry args={[0.02, 0.02, LAYER_SPACING_Y - 1, 4]} />
-        <meshStandardMaterial
-          color="#3b82f6"
-          emissive="#3b82f6"
-          emissiveIntensity={0.5}
-          transparent
-          opacity={0.25}
-        />
-      </mesh>
-      {/* Columns → Memory beam */}
-      {winnerId >= 0 && (
-        <mesh position={[0, -LAYER_SPACING_Y / 2, 0]}>
-          <cylinderGeometry args={[0.02, 0.02, LAYER_SPACING_Y - 1, 4]} />
-          <meshStandardMaterial
-            color="#a78bfa"
-            emissive="#a78bfa"
-            emissiveIntensity={0.5}
-            transparent
-            opacity={0.2}
-          />
-        </mesh>
-      )}
-    </group>
-  )
-}
-
+/* -------------------------------------------------------------------------- */
+/*  Ambient lighting                                                           */
+/* -------------------------------------------------------------------------- */
 function AmbientGlow() {
   const dopamine = useTelemetryStore((s) => s.dopamine)
   const norepinephrine = useTelemetryStore((s) => s.norepinephrine)
@@ -290,74 +365,69 @@ function AmbientGlow() {
 
   return (
     <>
-      <ambientLight intensity={0.15} />
-      <pointLight ref={lightRef} position={[0, 6, 0]} intensity={0.5} distance={20} />
-      <pointLight position={[-5, -3, 5]} intensity={0.1} color="#1e3a5f" />
-      <pointLight position={[5, -3, -5]} intensity={0.1} color="#312e81" />
+      <ambientLight intensity={0.12} />
+      <pointLight ref={lightRef} position={[0, 8, 0]} intensity={0.5} distance={25} />
+      <pointLight position={[-6, -4, 6]} intensity={0.08} color="#1e3a5f" />
+      <pointLight position={[6, -4, -6]} intensity={0.08} color="#312e81" />
     </>
   )
 }
 
-function WinnerLabel() {
-  const winnerId = useTelemetryStore((s) => s.animation?.winner_id)
-  const lastWinner = useTelemetryStore((s) => s.lastWinner)
+/* -------------------------------------------------------------------------- */
+/*  Scene                                                                      */
+/* -------------------------------------------------------------------------- */
+function Scene({ layers }) {
+  const hasData = useTelemetryStore((s) => (s.animation?.n_columns || 0) > 0)
+  const winnerId = useTelemetryStore((s) => s.animation?.winner_id ?? -1)
 
-  if (winnerId == null && !lastWinner) return null
-
-  return (
-    <Billboard position={[0, LAYER_SPACING_Y + 1.5, 0]}>
-      <Text fontSize={0.18} color="#a78bfa">
-        {`Winner: #${winnerId ?? '—'}  (${lastWinner ?? '—'})`}
-      </Text>
-    </Billboard>
-  )
-}
-
-function Scene() {
   return (
     <>
       <AmbientGlow />
-      <Stars radius={30} depth={60} count={1500} factor={3} saturation={0.1} fade speed={0.5} />
-      <InputLayer />
-      <ColumnNodes />
-      <MemoryLayer />
-      <FlowBeams />
-      <CrossModalBeams />
-      <WinnerLabel />
+
+      <InputLayer visible={layers.input} />
+      <ColumnNodes visible={layers.columns} />
+      <ContextLayer visible={layers.context} />
+      <STDPLayer visible={layers.stdp} />
+      <BindingLayer visible={layers.binding} />
+      <MemoryLayer visible={layers.memory} />
+      <CrossModalBeams visible={layers.crossModal} />
+
+      {/* Data flow particles between layers */}
+      {hasData && layers.input && layers.columns && (
+        <DataFlowParticles fromY={LAYER_Y.input} toY={LAYER_Y.columns} color="#3b82f6" count={8} />
+      )}
+      {winnerId >= 0 && layers.columns && layers.context && (
+        <DataFlowParticles fromY={LAYER_Y.columns} toY={LAYER_Y.context} color="#a78bfa" count={6} />
+      )}
+      {winnerId >= 0 && layers.binding && layers.memory && (
+        <DataFlowParticles fromY={LAYER_Y.binding} toY={LAYER_Y.memory} color="#22d3ee" count={6} />
+      )}
+
+      {/* Winner label */}
+      {winnerId >= 0 && (
+        <Billboard position={[0, LAYER_Y.input + 1.2, 0]}>
+          <Text fontSize={0.16} color="#a78bfa">
+            {`Winner: #${winnerId}`}
+          </Text>
+        </Billboard>
+      )}
+
       <OrbitControls
         enablePan={false}
-        minDistance={4}
-        maxDistance={25}
+        minDistance={5}
+        maxDistance={30}
         autoRotate
-        autoRotateSpeed={0.3}
+        autoRotateSpeed={0.2}
         maxPolarAngle={Math.PI * 0.85}
       />
     </>
   )
 }
 
-function NeuralSpace3D() {
-  return (
-    <div className="relative h-[520px] w-full overflow-hidden rounded-xl border border-border/40 bg-black">
-      <Canvas
-        camera={{ position: [0, 5, 12], fov: 50 }}
-        dpr={[1, 1.5]}
-        frameloop="always"
-        gl={{ antialias: true, alpha: false }}
-        onCreated={({ gl }) => {
-          gl.setClearColor('#030712')
-        }}
-      >
-        <Scene />
-      </Canvas>
-
-      {/* Overlay stats */}
-      <NeuralOverlay />
-    </div>
-  )
-}
-
-function NeuralOverlay() {
+/* -------------------------------------------------------------------------- */
+/*  Overlay HUD                                                                */
+/* -------------------------------------------------------------------------- */
+function NeuralOverlay({ layers, toggleLayer }) {
   const tokenCount = useTelemetryStore((s) => s.tokenCount)
   const winnerId = useTelemetryStore((s) => s.animation?.winner_id)
   const nCols = useTelemetryStore((s) => s.animation?.n_columns || 0)
@@ -366,33 +436,54 @@ function NeuralOverlay() {
   const acetylcholine = useTelemetryStore((s) => s.acetylcholine)
   const norepinephrine = useTelemetryStore((s) => s.norepinephrine)
 
+  const layerNames = [
+    ['input', 'Input', '#3b82f6'],
+    ['columns', 'Columns', '#a855f7'],
+    ['context', 'Context', '#06b6d4'],
+    ['stdp', 'STDP', '#f43f5e'],
+    ['binding', 'Binding', '#8b5cf6'],
+    ['memory', 'Memory', '#22d3ee'],
+    ['crossModal', 'Cross-Modal', '#10b981'],
+  ]
+
   return (
-    <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-4">
+    <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-3">
       {/* Top bar */}
       <div className="flex items-start justify-between">
-        <div className="rounded-lg bg-black/60 px-3 py-2 backdrop-blur-sm">
+        <div className="rounded-lg bg-black/70 px-3 py-2 backdrop-blur-sm">
           <div className="text-[10px] font-medium uppercase tracking-wider text-white/40">Neural Space</div>
           <div className="text-sm font-semibold text-white/90">{nCols} columns</div>
         </div>
-        <div className="rounded-lg bg-black/60 px-3 py-2 backdrop-blur-sm text-right">
+        <div className="rounded-lg bg-black/70 px-3 py-2 backdrop-blur-sm text-right">
           <div className="text-[10px] font-medium uppercase tracking-wider text-white/40">Tokens</div>
           <div className="text-sm font-semibold text-white/90">{tokenCount.toLocaleString()}</div>
         </div>
       </div>
 
       {/* Bottom bar */}
-      <div className="flex items-end justify-between">
-        <div className="flex gap-2">
+      <div className="flex items-end justify-between gap-2">
+        {/* Neuromods */}
+        <div className="flex gap-1.5 flex-wrap">
           <NeuromodPill label="DA" value={dopamine} color="#f59e0b" />
           <NeuromodPill label="5-HT" value={serotonin} color="#3b82f6" />
           <NeuromodPill label="ACh" value={acetylcholine} color="#10b981" />
           <NeuromodPill label="NE" value={norepinephrine} color="#ef4444" />
         </div>
-        {winnerId != null && (
-          <div className="rounded-lg bg-purple-500/20 px-3 py-1.5 backdrop-blur-sm">
-            <span className="text-xs font-semibold text-purple-300">Winner #{winnerId}</span>
-          </div>
-        )}
+
+        {/* Layer toggles */}
+        <div className="pointer-events-auto flex flex-col gap-0.5 rounded-lg bg-black/70 px-2 py-1.5 backdrop-blur-sm">
+          {layerNames.map(([key, name, color]) => (
+            <button
+              key={key}
+              onClick={() => toggleLayer(key)}
+              className="flex items-center gap-1.5 text-[10px] hover:text-white/90 transition-colors"
+              style={{ color: layers[key] ? color : 'rgba(255,255,255,0.25)' }}
+            >
+              <span className="size-1.5 rounded-full" style={{ backgroundColor: layers[key] ? color : 'rgba(255,255,255,0.15)' }} />
+              {name}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   )
@@ -401,10 +492,47 @@ function NeuralOverlay() {
 function NeuromodPill({ label, value, color }) {
   const pct = Math.round(value * 100)
   return (
-    <div className="flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 backdrop-blur-sm">
-      <div className="h-2 w-2 rounded-full" style={{ backgroundColor: color, opacity: 0.3 + value * 0.7 }} />
-      <span className="text-[10px] font-medium text-white/60">{label}</span>
-      <span className="text-[10px] font-semibold text-white/90">{pct}%</span>
+    <div className="flex items-center gap-1 rounded-full bg-black/70 px-2 py-0.5 backdrop-blur-sm">
+      <div className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color, opacity: 0.3 + value * 0.7 }} />
+      <span className="text-[9px] font-medium text-white/50">{label}</span>
+      <span className="text-[9px] font-semibold text-white/80">{pct}%</span>
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Main component                                                             */
+/* -------------------------------------------------------------------------- */
+function NeuralSpace3D() {
+  const [layers, setLayers] = useState({
+    input: true,
+    columns: true,
+    context: true,
+    stdp: true,
+    binding: true,
+    memory: true,
+    crossModal: true,
+  })
+
+  const toggleLayer = useCallback((key) => {
+    setLayers((prev) => ({ ...prev, [key]: !prev[key] }))
+  }, [])
+
+  return (
+    <div className="relative h-[520px] w-full overflow-hidden rounded-xl border border-border/40 bg-[#030712]">
+      <Canvas
+        camera={{ position: [0, 4, 16], fov: 50 }}
+        dpr={[1, 1.5]}
+        frameloop="always"
+        gl={{ antialias: true, alpha: false }}
+        onCreated={({ gl }) => {
+          gl.setClearColor('#030712')
+        }}
+      >
+        <Scene layers={layers} />
+      </Canvas>
+
+      <NeuralOverlay layers={layers} toggleLayer={toggleLayer} />
     </div>
   )
 }
