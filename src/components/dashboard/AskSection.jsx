@@ -73,7 +73,8 @@ function QuickStartStrip({ apiBase, brainRuntime, pendingAction, stopBrain, refr
         const body = await resp.json().catch(() => ({}))
         throw new Error(body.detail || `HTTP ${resp.status}`)
       }
-      if (refreshStatus) refreshStatus()
+      // Wait for status to propagate before clearing the starting flag
+      if (refreshStatus) await refreshStatus()
     } catch (err) {
       setError(err.message || 'Quick start failed')
     } finally {
