@@ -64,6 +64,7 @@ const NeuralSpaceSection = lazy(() => import('@/components/dashboard/NeuralSpace
 const GroundingProbeSection = lazy(() => import('@/components/dashboard/GroundingProbeSection'))
 const DevelopmentalSection = lazy(() => import('@/components/dashboard/DevelopmentalSection'))
 const TrainingSection = lazy(() => import('@/components/dashboard/TrainingSection'))
+const CortexSection = lazy(() => import('@/components/dashboard/CortexSection'))
 
 const SECTIONS = [
   {
@@ -71,6 +72,12 @@ const SECTIONS = [
     label: 'Overview',
     icon: BarChart3Icon,
     help: 'Live summary cards and stable telemetry charts.',
+  },
+  {
+    id: 'cortex',
+    label: 'Cortex',
+    icon: BrainIcon,
+    help: 'Living brain — thought stream, drives, and consciousness state powered by Gemma 4 E4B.',
   },
   {
     id: 'architecture',
@@ -136,6 +143,7 @@ const SECTIONS = [
 
 const SECTION_TITLES = {
   overview: 'Overview',
+  cortex: 'Cortex Monitor',
   architecture: 'Architecture',
   animation: 'Activity Monitor',
   neuralspace: 'Neural Space',
@@ -800,6 +808,13 @@ function App() {
 
   function renderActiveSection() {
     switch (activeSection) {
+      case 'cortex':
+        return (
+          <CortexSection
+            apiBase={apiBase}
+            status={status}
+          />
+        )
       case 'architecture':
         return (
           <ArchitectureSection
