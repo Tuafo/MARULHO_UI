@@ -357,6 +357,10 @@ function App() {
     serotonin: Number(item.serotonin ?? 0),
     acetylcholine: Number(item.acetylcholine ?? 0),
     norepinephrine: Number(item.norepinephrine ?? 0),
+    grounding_confidence: item.grounding_confidence || {},
+    animation: item.animation || null,
+    n_visual_signatures: Number(item.n_visual_signatures || 0),
+    n_audio_signatures: Number(item.n_audio_signatures || 0),
   }))
 
   useEffect(() => {

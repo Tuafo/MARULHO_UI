@@ -1,5 +1,6 @@
 import {
   ActivityIcon,
+  BrainIcon,
   DatabaseIcon,
   HardDriveIcon,
   LinkIcon,
@@ -96,6 +97,7 @@ export default function OverviewSection({ activeResponse, checkpointName, memory
   const crossModal = animation.cross_modal
   const contextTau = animation.context_tau
   const runtimeScope = status?.runtime_scope || {}
+  const brain = status?.terminus_runtime
 
   const tokenSparkline = telemetryData.slice(-20).map((d) => d.tokens ?? 0)
   const memorySparkline = telemetryData.slice(-20).map((d) => d.memoryFill ?? 0)
@@ -148,6 +150,20 @@ export default function OverviewSection({ activeResponse, checkpointName, memory
           description="The snapshot the runtime is currently attached to."
           badge={<Badge variant={status?.dirty_state ? 'outline' : 'secondary'}>{status?.dirty_state ? 'dirty' : 'aligned'}</Badge>}
           help="This is the snapshot the runtime started from. The name is not a score. What matters is whether the runtime still matches it or has unsaved changes."
+        />
+        <MetricCard
+          icon={BrainIcon}
+          title="Living brain"
+          value={brain?.running ? 'Active' : 'Idle'}
+          description={brain?.cortex?.enabled
+            ? `${brain.cortex.thoughts_generated ?? 0} thoughts · ${brain.multimodal?.cross_modal_visual_accepted ?? 0}V/${brain.multimodal?.cross_modal_audio_accepted ?? 0}A bound`
+            : 'Cortex not enabled'
+          }
+          badge={brain?.multimodal?.enabled
+            ? <Badge variant="secondary">multimodal</Badge>
+            : <Badge variant="outline">text only</Badge>
+          }
+          help="The Terminus living brain — SNN training + LLM thought generation. Shows tick count, Cortex thought count, and multimodal cross-modal binding counts."
         />
       </div>
 
