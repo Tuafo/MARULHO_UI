@@ -73,8 +73,14 @@ function QuickStartStrip({ apiBase, brainRuntime, pendingAction, stopBrain, refr
         const body = await resp.json().catch(() => ({}))
         throw new Error(body.detail || `HTTP ${resp.status}`)
       }
-      // Wait for status to propagate before clearing the starting flag
-      if (refreshStatus) await refreshStatus()
+      // Poll until the running flag propagates (up to 3s)
+      for (let i = 0; i < 6; i++) {
+        await new Promise((r) => setTimeout(r, 500))
+        if (refreshStatus) {
+          const st = await refreshStatus()
+          if (st?.terminus_runtime?.running) break
+        }
+      }
     } catch (err) {
       setError(err.message || 'Quick start failed')
     } finally {
