@@ -166,7 +166,7 @@ export default function CortexSection({ apiBase, status }) {
         />
         <EmptyState
           title="Cortex not available"
-          description="Ollama with Gemma 4 E4B is required. Start Ollama and restart the service to enable the cortex."
+          description="NVIDIA NIM API key required. Set NVIDIA_API_KEY in .env and restart the service to enable the cortex."
         />
       </section>
     )

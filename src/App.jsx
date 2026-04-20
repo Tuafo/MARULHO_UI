@@ -185,6 +185,11 @@ function createEmptyBrainConfigDraft() {
     sleepIntervalSeconds: '0.25',
     tickSteps: '1',
     repeatSources: true,
+    multimodalEnabled: false,
+    multimodalNmnistDir: 'N-MNIST',
+    multimodalFsddDir: 'free-spoken-digit-dataset-master',
+    multimodalEpisodeInterval: '256',
+    multimodalNSteps: '10',
   }
 }
 
@@ -587,6 +592,15 @@ function App() {
               trigger_interval_tokens: parsePositiveInteger(brainConfig.autonomyTriggerIntervalTokens, 4096),
               candidate_bank: candidateBank,
             }
+            : null,
+          multimodal: brainConfig.multimodalEnabled
+            ? {
+                enabled: true,
+                nmnist_dir: brainConfig.multimodalNmnistDir || 'N-MNIST',
+                fsdd_dir: brainConfig.multimodalFsddDir || 'free-spoken-digit-dataset-master',
+                episode_interval_tokens: parsePositiveInteger(brainConfig.multimodalEpisodeInterval, 256),
+                n_steps: parsePositiveInteger(brainConfig.multimodalNSteps, 10),
+              }
             : null,
         }),
       })
