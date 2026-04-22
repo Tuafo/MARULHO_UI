@@ -12,36 +12,57 @@ const MODALITY_COLORS = {
   text: '#3b82f6',
   visual: '#10b981',
   audio: '#f59e0b',
+  winner: '#a78bfa',
 }
 
-function LayerNode({ x, y, width, height, label, sublabel, color, isActive }) {
+const MAX_HEATMAP_COLUMNS = 160
+
+function clamp01(value) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return 0
+  return Math.max(0, Math.min(1, numeric))
+}
+
+function targetIs(selectedTarget, type, key) {
+  if (!selectedTarget) return false
+  if (selectedTarget.type !== type) return false
+  if (type === 'column') return selectedTarget.index === key
+  return selectedTarget.key === key
+}
+
+function LayerNode({
+  x,
+  y,
+  width,
+  height,
+  label,
+  sublabel,
+  color,
+  isActive,
+  nodeKey,
+  selected,
+  onSelect,
+  tooltip,
+}) {
   return (
-    <g transform={`translate(${x}, ${y})`}>
+    <g transform={`translate(${x}, ${y})`} onClick={() => onSelect?.({ type: 'layer', key: nodeKey })} className="cursor-pointer">
+      <title>{tooltip}</title>
       <rect
         width={width}
         height={height}
-        rx={8}
+        rx={14}
         fill={isActive ? color.glow : '#0f172a'}
-        stroke={isActive ? color.stroke : '#334155'}
-        strokeWidth={isActive ? 2 : 1}
-        style={{ transition: 'all 0.3s ease' }}
+        stroke={selected ? '#f8fafc' : isActive ? color.stroke : '#334155'}
+        strokeWidth={selected ? 2.6 : isActive ? 2 : 1}
       />
-      <text
-        x={width / 2}
-        y={height / 2 - 4}
-        textAnchor="middle"
-        fill={isActive ? color.stroke : '#64748b'}
-        fontSize={11}
-        fontWeight={600}
-        style={{ transition: 'fill 0.3s ease' }}
-      >
+      <text x={width / 2} y={height / 2 - 8} textAnchor="middle" fill={selected ? '#f8fafc' : isActive ? color.stroke : '#64748b'} fontSize={11.5} fontWeight={700}>
         {label}
       </text>
-      {sublabel && (
-        <text x={width / 2} y={height / 2 + 10} textAnchor="middle" fill="#64748b" fontSize={8}>
+      {sublabel ? (
+        <text x={width / 2} y={height / 2 + 14} textAnchor="middle" fill="#94a3b8" fontSize={8.5}>
           {sublabel}
         </text>
-      )}
+      ) : null}
     </g>
   )
 }
@@ -49,246 +70,299 @@ function LayerNode({ x, y, width, height, label, sublabel, color, isActive }) {
 function FlowArrow({ x1, y1, x2, y2, color, isActive }) {
   return (
     <line
-      x1={x1} y1={y1} x2={x2} y2={y2}
+      x1={x1}
+      y1={y1}
+      x2={x2}
+      y2={y2}
       stroke={isActive ? color : '#334155'}
-      strokeWidth={isActive ? 2 : 1}
-      strokeOpacity={isActive ? 0.6 : 0.3}
+      strokeWidth={isActive ? 2.5 : 1}
+      strokeOpacity={isActive ? 0.82 : 0.3}
       strokeDasharray={isActive ? 'none' : '4 4'}
       markerEnd={isActive ? 'url(#arrowhead)' : undefined}
-      style={{ transition: 'all 0.3s ease' }}
     />
   )
 }
 
-function ColumnHeatmap({ x, y, cellSize, cols, activations, winnerId }) {
-  const perRow = Math.min(cols, 8)
+function FlowCurve({ x1, y1, x2, y2, color, isActive, bendY }) {
+  const midY = bendY ?? Math.min(y1, y2) - 28
+  const path = `M ${x1} ${y1} Q ${x1} ${midY}, ${(x1 + x2) / 2} ${midY} T ${x2} ${y2}`
+  return (
+    <path
+      d={path}
+      fill="none"
+      stroke={isActive ? color : '#334155'}
+      strokeWidth={isActive ? 2.4 : 1}
+      strokeOpacity={isActive ? 0.82 : 0.3}
+      strokeDasharray={isActive ? 'none' : '4 4'}
+      markerEnd={isActive ? 'url(#arrowhead)' : undefined}
+    />
+  )
+}
+
+function ColumnHeatmap({ x, y, cellSize, cols, totalCols, activations, winnerId, selectedTarget, onSelectTarget }) {
+  const perRow = Math.min(cols <= 48 ? 16 : cols <= 96 ? 24 : 32, Math.max(1, cols))
   const rows = Math.ceil(cols / perRow)
 
   return (
     <g transform={`translate(${x}, ${y})`}>
-      <text x={(perRow * cellSize) / 2} y={-6} textAnchor="middle" fill="#64748b" fontSize={9} fontWeight={500}>
-        Column Activity
+      <text x="0" y="-18" fill="#e2e8f0" fontSize="12" fontWeight="700">Visible column field</text>
+      <text x="0" y="0" fill="#94a3b8" fontSize="9.5">
+        {totalCols > cols ? `Showing ${cols} of ${totalCols.toLocaleString()} runtime columns` : `${cols} visible columns`}
       </text>
-      {Array.from({ length: cols }).map((_, i) => {
-        const col = i % perRow
-        const row = Math.floor(i / perRow)
-        const activation = activations[i] ?? 0
-        const isWinner = i === winnerId
-        const intensity = Math.min(activation * 3, 1)
-        const color = isWinner ? '#8b5cf6' : '#3b82f6'
+      <g transform="translate(0, 18)">
+        {Array.from({ length: cols }).map((_, index) => {
+          const col = index % perRow
+          const row = Math.floor(index / perRow)
+          const activation = activations[index] ?? 0
+          const isWinner = index === winnerId
+          const selected = targetIs(selectedTarget, 'column', index)
+          const intensity = Math.min(Number(activation || 0) * 3, 1)
+          const fill = isWinner ? MODALITY_COLORS.winner : '#3b82f6'
 
-        return (
-          <g key={i}>
-            <rect
-              x={col * cellSize + 1}
-              y={row * cellSize + 1}
-              width={cellSize - 2}
-              height={cellSize - 2}
-              rx={3}
-              fill={color}
-              fillOpacity={0.08 + intensity * 0.7}
-              stroke={isWinner ? '#a78bfa' : 'none'}
-              strokeWidth={isWinner ? 1.5 : 0}
-              style={{ transition: 'fill-opacity 0.2s ease' }}
-            />
-            {isWinner && (
+          return (
+            <g key={index} onClick={() => onSelectTarget?.({ type: 'column', index })} className="cursor-pointer">
+              <title>{`Column #${index} · activation ${Number(activation || 0).toFixed(3)}${isWinner ? ' · winner' : ''}`}</title>
               <rect
                 x={col * cellSize + 1}
                 y={row * cellSize + 1}
                 width={cellSize - 2}
                 height={cellSize - 2}
-                rx={3}
-                fill="none"
-                stroke="#a78bfa"
-                strokeWidth={1}
-                strokeOpacity={0.3}
-              >
-                <animate
-                  attributeName="stroke-opacity"
-                  values="0.6;0.1;0.6"
-                  dur="1s"
-                  repeatCount="indefinite"
-                />
-              </rect>
-            )}
-            <text
-              x={col * cellSize + cellSize / 2}
-              y={row * cellSize + cellSize / 2 + 3}
-              textAnchor="middle"
-              fill={intensity > 0.3 ? '#e2e8f0' : '#475569'}
-              fontSize={7}
-              fontWeight={isWinner ? 700 : 400}
-            >
-              {i}
-            </text>
-          </g>
-        )
-      })}
-    </g>
-  )
-}
-
-function NeuroGauge({ x, y, radius, value, label, color }) {
-  const startAngle = -140
-  const endAngle = 140
-  const range = endAngle - startAngle
-  const valAngle = startAngle + value * range
-  const toRad = (deg) => (deg * Math.PI) / 180
-
-  const arcPath = (start, end) => {
-    const x1 = Math.cos(toRad(start)) * radius
-    const y1 = Math.sin(toRad(start)) * radius
-    const x2 = Math.cos(toRad(end)) * radius
-    const y2 = Math.sin(toRad(end)) * radius
-    const largeArc = end - start > 180 ? 1 : 0
-    return `M ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2}`
-  }
-
-  return (
-    <g transform={`translate(${x}, ${y})`}>
-      <path d={arcPath(startAngle, endAngle)} fill="none" stroke="#1e293b" strokeWidth={4} strokeLinecap="round" />
-      <path d={arcPath(startAngle, valAngle)} fill="none" stroke={color} strokeWidth={4} strokeLinecap="round">
-        <animate attributeName="d" to={arcPath(startAngle, valAngle)} dur="0.4s" fill="freeze" />
-      </path>
-      <text y={4} textAnchor="middle" fill="#e2e8f0" fontSize={12} fontWeight={600}>
-        {(value * 100).toFixed(0)}%
-      </text>
-      <text y={radius + 12} textAnchor="middle" fill="#64748b" fontSize={8}>
-        {label}
+                rx={4}
+                fill={fill}
+                fillOpacity={0.1 + intensity * 0.76}
+                stroke={selected ? '#f8fafc' : isWinner ? '#ddd6fe' : 'none'}
+                strokeWidth={selected ? 2 : isWinner ? 1.5 : 0}
+              />
+              {isWinner && !selected ? (
+                <rect
+                  x={col * cellSize - 1}
+                  y={row * cellSize - 1}
+                  width={cellSize + 2}
+                  height={cellSize + 2}
+                  rx={5}
+                  fill="none"
+                  stroke="#a78bfa"
+                  strokeWidth={1}
+                  strokeOpacity={0.35}
+                >
+                  <animate attributeName="stroke-opacity" values="0.65;0.12;0.65" dur="1.1s" repeatCount="indefinite" />
+                </rect>
+              ) : null}
+              {cellSize >= 18 ? (
+                <text x={col * cellSize + cellSize / 2} y={row * cellSize + cellSize / 2 + 3} textAnchor="middle" fill={intensity > 0.3 ? '#e2e8f0' : '#475569'} fontSize={7} fontWeight={selected || isWinner ? 700 : 400}>
+                  {index}
+                </text>
+              ) : null}
+            </g>
+          )
+        })}
+      </g>
+      <text x="0" y={rows * cellSize + 42} fill="#64748b" fontSize="8.5">
+        Brighter cells are more active. Purple highlights the current winner.
       </text>
     </g>
   )
 }
 
-const NEURO_KEYS = ['dopamine', 'serotonin', 'acetylcholine', 'norepinephrine']
-const NEURO_LABELS = { dopamine: 'DA', serotonin: '5-HT', acetylcholine: 'ACh', norepinephrine: 'NE' }
-const NEURO_COLORS = {
-  dopamine: '#f59e0b',
-  serotonin: '#3b82f6',
-  acetylcholine: '#10b981',
-  norepinephrine: '#ef4444',
-}
-
-export default memo(function NeuralFlowDiagram({ animationData, telemetry }) {
+export default memo(function NeuralFlowDiagram({ animationData, selectedTarget, onSelectTarget }) {
   const nCols = animationData?.n_columns || 0
-  const activations = animationData?.activations || []
   const winnerId = animationData?.winner_id
-  const memoryFill = animationData?.memory_fill ?? 0
-  const crossModal = animationData?.cross_modal
+  const memoryFill = clamp01(animationData?.memory_fill ?? 0)
+  const crossModal = animationData?.cross_modal || {}
+  const activations = Array.isArray(animationData?.activations) ? animationData.activations : []
+  const visibleCols = Math.min(nCols, MAX_HEATMAP_COLUMNS)
+  const visibleActivations = activations.slice(0, visibleCols)
   const hasData = nCols > 0
-
-  const cellSize = nCols <= 16 ? 28 : nCols <= 32 ? 22 : nCols <= 64 ? 18 : 14
-  const heatmapCols = Math.min(nCols, 8)
-  const heatmapRows = Math.ceil(nCols / heatmapCols)
-  const heatmapHeight = heatmapRows * cellSize
-
-  const svgWidth = 780
-  const svgHeight = Math.max(340, heatmapHeight + 180)
 
   if (!hasData) return null
 
-  const layerW = 120
-  const layerH = 44
-  const flowY = 24
-  const centerY = flowY + layerH / 2
+  const visualConfidence = clamp01(crossModal.visual_confidence ?? 0)
+  const audioConfidence = clamp01(crossModal.audio_confidence ?? 0)
 
-  const inputX = 20
-  const colsX = 180
-  const memX = 340
-  const routeX = 500
+  const cellSize = visibleCols <= 96 ? 20 : 18
+  const perRow = Math.min(visibleCols <= 48 ? 16 : visibleCols <= 96 ? 24 : 32, Math.max(1, visibleCols))
+  const heatmapRows = Math.ceil(visibleCols / perRow)
+  const heatmapWidth = perRow * cellSize
+  const heatmapHeight = heatmapRows * cellSize + 56
+
+  const svgWidth = 1280
+  const padding = 48
+
+  const nodeW = 190
+  const nodeH = 68
+  const pipelineGap = 54
+  const pipelineWidth = nodeW * 4 + pipelineGap * 3
+  const pipelineX = (svgWidth - pipelineWidth) / 2
+  const pipelineY = 64
+  const centerY = pipelineY + nodeH / 2
+
+  const inputX = pipelineX
+  const columnsX = inputX + nodeW + pipelineGap
+  const memoryX = columnsX + nodeW + pipelineGap
+  const routingX = memoryX + nodeW + pipelineGap
+  const columnsCenterX = columnsX + nodeW / 2
+
+  const sensoryW = 118
+  const sensoryH = 42
+  const sensoryGap = 28
+  const sensoryY = pipelineY + nodeH + 96
+  const imageX = columnsCenterX - sensoryGap / 2 - sensoryW
+  const audioX = columnsCenterX + sensoryGap / 2
+
+  const heatmapX = (svgWidth - heatmapWidth) / 2
+  const heatmapY = sensoryY + sensoryH + 104
+  const svgHeight = heatmapY + heatmapHeight + 64
 
   return (
     <svg
       width="100%"
       viewBox={`0 0 ${svgWidth} ${svgHeight}`}
       preserveAspectRatio="xMidYMid meet"
-      className="min-w-0"
+      className="min-w-0 overflow-hidden rounded-xl border border-border/40 bg-[#050816]"
     >
       <defs>
         <linearGradient id="bg-grad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#0f172a" />
-          <stop offset="100%" stopColor="#1e1b4b" stopOpacity="0.3" />
+          <stop offset="0%" stopColor="#050816" />
+          <stop offset="55%" stopColor="#0f172a" />
+          <stop offset="100%" stopColor="#1e1b4b" stopOpacity="0.45" />
         </linearGradient>
         <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
           <polygon points="0 0, 8 3, 0 6" fill="#64748b" />
         </marker>
       </defs>
 
-      <rect width={svgWidth} height={svgHeight} rx={12} fill="url(#bg-grad)" />
+      <rect width={svgWidth} height={svgHeight} rx={18} fill="url(#bg-grad)" />
 
-      {/* Flow arrows */}
-      <FlowArrow x1={inputX + layerW} y1={centerY} x2={colsX} y2={centerY} color={MODALITY_COLORS.text} isActive={hasData} />
-      <FlowArrow x1={colsX + layerW} y1={centerY} x2={memX} y2={centerY} color={LAYER_COLORS.columns.stroke} isActive={winnerId != null} />
-      <FlowArrow x1={memX + layerW} y1={centerY} x2={routeX} y2={centerY} color={LAYER_COLORS.memory.stroke} isActive={memoryFill > 0} />
-
-      {/* Cross-modal inputs */}
-      {crossModal && (
-        <>
-          <FlowArrow x1={colsX + layerW / 2 - 20} y1={flowY + layerH + 46} x2={colsX + layerW / 2 - 20} y2={flowY + layerH} color={MODALITY_COLORS.visual} isActive={crossModal.visual_confidence > 0} />
-          <FlowArrow x1={colsX + layerW / 2 + 20} y1={flowY + layerH + 46} x2={colsX + layerW / 2 + 20} y2={flowY + layerH} color={MODALITY_COLORS.audio} isActive={crossModal.audio_confidence > 0} />
-          <LayerNode x={colsX - 10} y={flowY + layerH + 46} width={60} height={28} label="Visual" sublabel="DVS" color={LAYER_COLORS.crossModal} isActive={crossModal.visual_confidence > 0.01} />
-          <LayerNode x={colsX + layerW - 50} y={flowY + layerH + 46} width={60} height={28} label="Audio" sublabel="Mel" color={LAYER_COLORS.crossModal} isActive={crossModal.audio_confidence > 0.01} />
-        </>
-      )}
-
-      {/* Layer nodes */}
-      <LayerNode x={inputX} y={flowY} width={layerW} height={layerH} label="RTF Encoder" sublabel="text → spikes" color={LAYER_COLORS.input} isActive={hasData} />
-      <LayerNode x={colsX} y={flowY} width={layerW} height={layerH} label="Competitive Cols" sublabel={`${nCols} columns`} color={LAYER_COLORS.columns} isActive={winnerId != null} />
-      <LayerNode x={memX} y={flowY} width={layerW} height={layerH} label="Memory Store" sublabel={`${(memoryFill * 100).toFixed(0)}% full`} color={LAYER_COLORS.memory} isActive={memoryFill > 0} />
-      <LayerNode x={routeX} y={flowY} width={layerW} height={layerH} label="HNSW Routing" sublabel="ANN search" color={LAYER_COLORS.routing} isActive={hasData} />
-
-      {/* Column heatmap */}
-      <ColumnHeatmap
-        x={20}
-        y={flowY + layerH + (crossModal ? 100 : 50)}
-        cellSize={cellSize}
-        cols={nCols}
-        activations={activations}
-        winnerId={winnerId}
+      <rect
+        x={padding - 14}
+        y={pipelineY - 24}
+        width={svgWidth - (padding - 14) * 2}
+        height={sensoryY + sensoryH - pipelineY + 40}
+        rx={18}
+        fill="#0f172a55"
+        stroke="#1f293733"
       />
 
-      {/* Neuromodulator gauges */}
-      <g transform={`translate(${svgWidth - 200}, ${flowY + layerH + (crossModal ? 100 : 50)})`}>
-        <text x={80} y={-6} textAnchor="middle" fill="#64748b" fontSize={9} fontWeight={500}>
-          Neuromodulators
-        </text>
-        {NEURO_KEYS.map((key, i) => (
-          <NeuroGauge
-            key={key}
-            x={40 + (i % 2) * 80}
-            y={30 + Math.floor(i / 2) * 70}
-            radius={22}
-            value={telemetry?.[key] ?? 0}
-            label={NEURO_LABELS[key]}
-            color={NEURO_COLORS[key]}
-          />
-        ))}
-      </g>
+      <FlowArrow x1={inputX + nodeW} y1={centerY} x2={columnsX} y2={centerY} color={MODALITY_COLORS.text} isActive={hasData} />
+      <FlowArrow x1={columnsX + nodeW} y1={centerY} x2={memoryX} y2={centerY} color={LAYER_COLORS.columns.stroke} isActive={winnerId != null} />
+      <FlowArrow x1={memoryX + nodeW} y1={centerY} x2={routingX} y2={centerY} color={LAYER_COLORS.memory.stroke} isActive={memoryFill > 0} />
 
-      {/* Winner badge */}
-      {winnerId != null && (
-        <g transform={`translate(${routeX + layerW + 16}, ${centerY})`}>
-          <rect x={-4} y={-12} width={48} height={24} rx={6} fill="#8b5cf620" stroke="#8b5cf6" strokeWidth={1} />
-          <text textAnchor="start" fill="#a78bfa" fontSize={10} fontWeight={600} y={3}>
-            W: #{winnerId}
-          </text>
-        </g>
-      )}
+      <LayerNode
+        x={inputX}
+        y={pipelineY}
+        width={nodeW}
+        height={nodeH}
+        label="Token encoder"
+        sublabel="text → spikes"
+        color={LAYER_COLORS.input}
+        isActive={hasData}
+        nodeKey="input"
+        selected={targetIs(selectedTarget, 'layer', 'input')}
+        onSelect={onSelectTarget}
+        tooltip="Token encoder · converts live text windows into spike-friendly input patterns"
+      />
+      <LayerNode
+        x={columnsX}
+        y={pipelineY}
+        width={nodeW}
+        height={nodeH}
+        label="Competitive columns"
+        sublabel={winnerId != null && winnerId >= 0 ? `winner #${winnerId} · ${nCols.toLocaleString()} total` : `${nCols.toLocaleString()} total`}
+        color={LAYER_COLORS.columns}
+        isActive={winnerId != null}
+        nodeKey="columns"
+        selected={targetIs(selectedTarget, 'layer', 'columns')}
+        onSelect={onSelectTarget}
+        tooltip={`Competitive field · winner ${winnerId != null && winnerId >= 0 ? `#${winnerId}` : 'none'}`}
+      />
+      <LayerNode
+        x={memoryX}
+        y={pipelineY}
+        width={nodeW}
+        height={nodeH}
+        label="Memory store"
+        sublabel={`fill ${(memoryFill * 100).toFixed(0)}%`}
+        color={LAYER_COLORS.memory}
+        isActive={memoryFill > 0}
+        nodeKey="memory"
+        selected={targetIs(selectedTarget, 'layer', 'memory')}
+        onSelect={onSelectTarget}
+        tooltip={`Memory store · fill ${(memoryFill * 100).toFixed(0)}%`}
+      />
+      <LayerNode
+        x={routingX}
+        y={pipelineY}
+        width={nodeW}
+        height={nodeH}
+        label="Routing index"
+        sublabel="semantic ANN"
+        color={LAYER_COLORS.routing}
+        isActive={hasData}
+        nodeKey="routing"
+        selected={targetIs(selectedTarget, 'layer', 'routing')}
+        onSelect={onSelectTarget}
+        tooltip="Routing index · semantic nearest-neighbour access into memory/evidence space"
+      />
 
-      {/* Cross-modal confidence badges */}
-      {crossModal && (
-        <g transform={`translate(${svgWidth - 200}, ${svgHeight - 44})`}>
-          <text x={0} y={0} fill="#64748b" fontSize={9}>Cross-Modal Confidence</text>
-          <rect x={0} y={6} width={76} height={20} rx={4} fill={MODALITY_COLORS.visual} fillOpacity={0.15} stroke={MODALITY_COLORS.visual} strokeWidth={0.5} />
-          <text x={38} y={20} textAnchor="middle" fill={MODALITY_COLORS.visual} fontSize={9} fontWeight={600}>
-            V: {crossModal.visual_confidence.toFixed(3)}
-          </text>
-          <rect x={82} y={6} width={76} height={20} rx={4} fill={MODALITY_COLORS.audio} fillOpacity={0.15} stroke={MODALITY_COLORS.audio} strokeWidth={0.5} />
-          <text x={120} y={20} textAnchor="middle" fill={MODALITY_COLORS.audio} fontSize={9} fontWeight={600}>
-            A: {crossModal.audio_confidence.toFixed(3)}
-          </text>
-        </g>
-      )}
+      <FlowCurve
+        x1={imageX + sensoryW / 2}
+        y1={sensoryY}
+        x2={columnsCenterX - 30}
+        y2={pipelineY + nodeH}
+        color={MODALITY_COLORS.visual}
+        isActive={visualConfidence > 0}
+        bendY={sensoryY - 34}
+      />
+      <FlowCurve
+        x1={audioX + sensoryW / 2}
+        y1={sensoryY}
+        x2={columnsCenterX + 30}
+        y2={pipelineY + nodeH}
+        color={MODALITY_COLORS.audio}
+        isActive={audioConfidence > 0}
+        bendY={sensoryY - 34}
+      />
+
+      <LayerNode
+        x={imageX}
+        y={sensoryY}
+        width={sensoryW}
+        height={sensoryH}
+        label="Image"
+        sublabel={`confidence ${visualConfidence.toFixed(2)}`}
+        color={LAYER_COLORS.crossModal}
+        isActive={visualConfidence > 0.01}
+        nodeKey="visual"
+        selected={targetIs(selectedTarget, 'layer', 'visual')}
+        onSelect={onSelectTarget}
+        tooltip={`Image grounding beam · confidence ${visualConfidence.toFixed(3)}`}
+      />
+      <LayerNode
+        x={audioX}
+        y={sensoryY}
+        width={sensoryW}
+        height={sensoryH}
+        label="Audio"
+        sublabel={`confidence ${audioConfidence.toFixed(2)}`}
+        color={LAYER_COLORS.crossModal}
+        isActive={audioConfidence > 0.01}
+        nodeKey="audio"
+        selected={targetIs(selectedTarget, 'layer', 'audio')}
+        onSelect={onSelectTarget}
+        tooltip={`Audio grounding beam · confidence ${audioConfidence.toFixed(3)}`}
+      />
+
+      <ColumnHeatmap
+        x={heatmapX}
+        y={heatmapY}
+        cellSize={cellSize}
+        cols={visibleCols}
+        totalCols={nCols}
+        activations={visibleActivations}
+        winnerId={winnerId}
+        selectedTarget={selectedTarget}
+        onSelectTarget={onSelectTarget}
+      />
     </svg>
   )
 })

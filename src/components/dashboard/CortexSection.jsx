@@ -156,8 +156,8 @@ export default function CortexSection({ apiBase, status }) {
     return (
       <section className="space-y-4">
         <SectionHeading
-          title="Cortex"
-          description="Hybrid SNN-LLM living brain — thought generation, drives, and consciousness state."
+          title="Mind"
+          description="Hybrid SNN-LLM living mind — thought generation, drives, and consciousness state."
           badge={
             <Badge variant="outline" className="gap-1">
               <CloudOffIcon className="size-3" /> Unavailable
@@ -165,7 +165,7 @@ export default function CortexSection({ apiBase, status }) {
           }
         />
         <EmptyState
-          title="Cortex not available"
+          title="Mind not available"
           description="NVIDIA NIM API key required. Set NVIDIA_API_KEY in .env and restart the service to enable the cortex."
         />
       </section>
@@ -175,8 +175,8 @@ export default function CortexSection({ apiBase, status }) {
   return (
     <section className="space-y-4">
       <SectionHeading
-        title="Cortex"
-        description="Hybrid SNN-LLM living brain — thought generation, drives, and consciousness state."
+        title="Mind"
+        description="Hybrid SNN-LLM living mind — thought generation, drives, and consciousness state."
         badge={
           <Badge variant={running ? 'default' : 'secondary'} className="gap-1">
             {running ? (
@@ -321,9 +321,10 @@ export default function CortexSection({ apiBase, status }) {
             <CardTitle className="flex items-center gap-2">
               Thought Stream
               <HelpTip>
-                <p>Live stream of the cortex's autonomous thoughts. Each thought is generated
-                  by Gemma 4 E4B, driven by SNN curiosity/anxiety signals.
-                  Topics, confidence, and emotional valence are extracted from structured output.</p>
+                <p>Live stream of the mind layer's autonomous thoughts. Each thought is generated
+                  by the NVIDIA NIM cortex stack and driven by SNN curiosity, prediction error,
+                  and exploration signals. Topics, confidence, and emotional valence are extracted
+                  from structured output.</p>
               </HelpTip>
             </CardTitle>
             <CardDescription>
@@ -347,7 +348,7 @@ export default function CortexSection({ apiBase, status }) {
                   description={
                     running
                       ? 'The cortex is warming up. First thought appears when drives cross threshold.'
-                      : 'Start Terminus to activate the cortex thought loop.'
+                      : 'Start the Terminus brain to activate the mind loop.'
                   }
                 />
               )}
@@ -360,14 +361,14 @@ export default function CortexSection({ apiBase, status }) {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            Ask the Brain
+            Ask the Mind
             <HelpTip>
               <p>Submit a question for the cortex to answer in its next deliberation cycle.
                 The question is queued (up to 8 pending) and answered asynchronously —
                 the response appears in the thought stream.</p>
             </HelpTip>
           </CardTitle>
-          <CardDescription>Submit a question — the brain will answer in its next thought cycle</CardDescription>
+          <CardDescription>Submit a question — the mind will answer in its next thought cycle</CardDescription>
         </CardHeader>
         <CardContent>
           <form
@@ -396,7 +397,7 @@ export default function CortexSection({ apiBase, status }) {
             <p className="mt-2 text-xs text-destructive">Failed to send question</p>
           )}
           {askStatus === 'rejected' && (
-            <p className="mt-2 text-xs text-yellow-500">Cortex unavailable</p>
+            <p className="mt-2 text-xs text-yellow-500">Mind unavailable</p>
           )}
         </CardContent>
       </Card>

@@ -156,14 +156,14 @@ export default function OverviewSection({ activeResponse, checkpointName, memory
           title="Living brain"
           value={brain?.running ? 'Active' : 'Idle'}
           description={brain?.cortex?.enabled
-            ? `${brain.cortex.thoughts_generated ?? 0} thoughts · ${brain.multimodal?.cross_modal_visual_accepted ?? 0}V/${brain.multimodal?.cross_modal_audio_accepted ?? 0}A bound`
-            : 'Cortex not enabled'
+            ? `${brain.cortex.thoughts_generated ?? 0} thoughts · ${brain.multimodal?.cross_modal_visual_accepted ?? 0}V/${brain.multimodal?.cross_modal_audio_accepted ?? 0}A bound · ${brain.multimodal?.recent_preview_count ?? 0} previews`
+            : 'Mind layer not enabled'
           }
           badge={brain?.multimodal?.enabled
-            ? <Badge variant="secondary">multimodal</Badge>
+            ? <Badge variant="secondary">sensory active</Badge>
             : <Badge variant="outline">text only</Badge>
           }
-          help="The Terminus living brain — SNN training + LLM thought generation. Shows tick count, Cortex thought count, and multimodal cross-modal binding counts."
+          help="The active Terminus brain — SNN training, real sensory grounding, and NIM thought generation. Shows thought count, cross-modal binding counts, and preview availability."
         />
       </div>
 

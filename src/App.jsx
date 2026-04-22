@@ -3,6 +3,7 @@ import {
   ActivityIcon,
   AlertCircleIcon,
   ArchiveIcon,
+  AudioLinesIcon,
   BarChart3Icon,
   BrainIcon,
   BoxIcon,
@@ -65,6 +66,7 @@ const GroundingProbeSection = lazy(() => import('@/components/dashboard/Groundin
 const DevelopmentalSection = lazy(() => import('@/components/dashboard/DevelopmentalSection'))
 const TrainingSection = lazy(() => import('@/components/dashboard/TrainingSection'))
 const CortexSection = lazy(() => import('@/components/dashboard/CortexSection'))
+const SensorySection = lazy(() => import('@/components/dashboard/SensorySection'))
 
 const SECTIONS = [
   {
@@ -75,19 +77,25 @@ const SECTIONS = [
   },
   {
     id: 'cortex',
-    label: 'Cortex',
+    label: 'Mind',
     icon: BrainIcon,
-    help: 'Living brain — thought stream, drives, and consciousness state powered by Gemma 4 E4B.',
+    help: 'Living mind — thought stream, drives, and deliberation state powered by the NVIDIA NIM cortex.',
+  },
+  {
+    id: 'sensory',
+    label: 'Sensory',
+    icon: AudioLinesIcon,
+    help: 'Real image/audio grounding from Hugging Face with semantic routing and live previews.',
   },
   {
     id: 'architecture',
-    label: 'Architecture',
+    label: 'Model',
     icon: LayersIcon,
     help: 'SVG diagram of the active model layers and their configuration.',
   },
   {
     id: 'animation',
-    label: 'Activity',
+    label: 'Dynamics',
     icon: ActivityIcon,
     help: 'Live spike flow, column activations, neuromodulators, and memory state.',
   },
@@ -99,13 +107,13 @@ const SECTIONS = [
   },
   {
     id: 'training',
-    label: 'Training',
+    label: 'Learning',
     icon: TrendingUpIcon,
-    help: 'Live training metrics: grounding confidence, reconstruction error, neuromodulator dynamics.',
+    help: 'Live learning metrics: grounding confidence, reconstruction error, and neuromodulator dynamics.',
   },
   {
     id: 'ask',
-    label: 'Ask',
+    label: 'Workspace',
     icon: MessageSquareTextIcon,
     help: 'Inspect routing, evidence, and grounded answers.',
   },
@@ -117,13 +125,13 @@ const SECTIONS = [
   },
   {
     id: 'runtime',
-    label: 'Runtime',
+    label: 'Systems',
     icon: CpuIcon,
-    help: 'Model, memory, and routing internals for the active checkpoint.',
+    help: 'Model, memory, routing, and runtime internals for the active checkpoint.',
   },
   {
     id: 'developmental',
-    label: 'Developmental',
+    label: 'Growth',
     icon: GraduationCapIcon,
     help: 'Stage progress, plasticity mode, and maturity indicators.',
   },
@@ -143,15 +151,16 @@ const SECTIONS = [
 
 const SECTION_TITLES = {
   overview: 'Overview',
-  cortex: 'Cortex Monitor',
-  architecture: 'Architecture',
-  animation: 'Activity Monitor',
+  cortex: 'Mind Monitor',
+  sensory: 'Sensory Feed',
+  architecture: 'Model Architecture',
+  animation: 'Neural Dynamics',
   neuralspace: 'Neural Space',
-  training: 'Training Monitor',
-  ask: 'Ask Workspace',
+  training: 'Learning Monitor',
+  ask: 'Workspace',
   grounding: 'Grounding Probe',
-  runtime: 'Runtime Details',
-  developmental: 'Developmental Stages',
+  runtime: 'Systems & Runtime',
+  developmental: 'Growth Stages',
   checkpoints: 'Checkpoints',
   traces: 'Traces',
 }
@@ -174,6 +183,36 @@ function createEmptySourceDraft() {
   }
 }
 
+function normalizeCurriculumConfig(runtime) {
+  if (!runtime?.curriculum?.enabled) return null
+  return {
+    enabled: true,
+    topics_per_cycle: runtime.curriculum.topics_per_cycle ?? 3,
+    trigger_interval_tokens: runtime.curriculum.trigger_interval_tokens ?? 1024,
+    cooldown_seconds: runtime.curriculum.cooldown_seconds ?? 30,
+  }
+}
+
+function normalizeSensoryConfig(runtime) {
+  if (!runtime?.sensory?.enabled) return null
+  return {
+    enabled: true,
+    source_bank: Array.isArray(runtime.sensory.source_bank) ? runtime.sensory.source_bank : [],
+    episode_interval_tokens: runtime.sensory.episode_interval_tokens ?? 1536,
+    items_per_episode: runtime.sensory.items_per_episode ?? 2,
+    base_windows_per_item: runtime.sensory.base_windows_per_item ?? 4,
+    max_windows_per_item: runtime.sensory.max_windows_per_item ?? 10,
+    confidence_window_gain: runtime.sensory.confidence_window_gain ?? 3,
+    semantic_window_gain: runtime.sensory.semantic_window_gain ?? 3,
+    item_retrieval_lookahead: runtime.sensory.item_retrieval_lookahead ?? 6,
+    item_retrieval_semantic_weight: runtime.sensory.item_retrieval_semantic_weight ?? 0.72,
+    modality_target_confidence: runtime.sensory.modality_target_confidence ?? 0.7,
+    observation_salience: runtime.sensory.observation_salience ?? 0.82,
+    cooldown_seconds: runtime.sensory.cooldown_seconds ?? 8,
+    repeat_sources: runtime.sensory.repeat_sources ?? true,
+  }
+}
+
 function createEmptyBrainConfigDraft() {
   return {
     sourceBank: [createEmptySourceDraft()],
@@ -185,11 +224,8 @@ function createEmptyBrainConfigDraft() {
     sleepIntervalSeconds: '0.25',
     tickSteps: '1',
     repeatSources: true,
-    multimodalEnabled: false,
-    multimodalNmnistDir: 'N-MNIST',
-    multimodalFsddDir: 'free-spoken-digit-dataset-master',
-    multimodalEpisodeInterval: '256',
-    multimodalNSteps: '10',
+    curriculumConfig: null,
+    sensoryConfig: null,
   }
 }
 
@@ -224,6 +260,8 @@ function createBrainConfigDraftFromRuntime(runtime) {
     sleepIntervalSeconds: String(runtime?.sleep_interval_seconds ?? 0.25),
     tickSteps: '1',
     repeatSources: Boolean(runtime?.repeat_sources ?? true),
+    curriculumConfig: normalizeCurriculumConfig(runtime),
+    sensoryConfig: normalizeSensoryConfig(runtime),
   }
 }
 
@@ -255,6 +293,8 @@ function createBrainConfigRuntimeSignature(runtime) {
     sleepIntervalSeconds: String(runtime?.sleep_interval_seconds ?? 0.25),
     tickSteps: '1',
     repeatSources: Boolean(runtime?.repeat_sources ?? true),
+    curriculumConfig: normalizeCurriculumConfig(runtime),
+    sensoryConfig: normalizeSensoryConfig(runtime),
   })
 }
 
@@ -574,7 +614,7 @@ function App() {
       .map((entry, index) => normalizeDraftSource(entry, `candidate_source_${index + 1}`))
       .filter(Boolean)
 
-    setPendingAction('Configuring the Terminus runtime')
+    setPendingAction('Configuring the Terminus brain')
     setError('')
 
     try {
@@ -593,15 +633,8 @@ function App() {
               candidate_bank: candidateBank,
             }
             : null,
-          multimodal: brainConfig.multimodalEnabled
-            ? {
-                enabled: true,
-                nmnist_dir: brainConfig.multimodalNmnistDir || 'N-MNIST',
-                fsdd_dir: brainConfig.multimodalFsddDir || 'free-spoken-digit-dataset-master',
-                episode_interval_tokens: parsePositiveInteger(brainConfig.multimodalEpisodeInterval, 256),
-                n_steps: parsePositiveInteger(brainConfig.multimodalNSteps, 10),
-              }
-            : null,
+          curriculum: brainConfig.curriculumConfig,
+          sensory: brainConfig.sensoryConfig,
         }),
       })
 
@@ -615,7 +648,7 @@ function App() {
   }
 
   async function startBrain() {
-    setPendingAction('Starting the Terminus runtime')
+    setPendingAction('Starting the Terminus brain')
     setError('')
 
     try {
@@ -629,7 +662,7 @@ function App() {
   }
 
   async function stopBrain() {
-    setPendingAction('Stopping the Terminus runtime')
+    setPendingAction('Stopping the Terminus brain')
     setError('')
 
     try {
@@ -643,7 +676,7 @@ function App() {
   }
 
   async function tickBrain() {
-    setPendingAction('Advancing the Terminus runtime')
+    setPendingAction('Advancing the Terminus brain')
     setError('')
 
     try {
@@ -833,6 +866,13 @@ function App() {
             status={status}
           />
         )
+      case 'sensory':
+        return (
+          <SensorySection
+            apiBase={apiBase}
+            brainRuntime={brainRuntime}
+          />
+        )
       case 'architecture':
         return (
           <ArchitectureSection
@@ -957,7 +997,7 @@ function App() {
               <div className="min-w-0">
                 <div className="font-semibold tracking-tight">Terminus</div>
                 <div className="truncate text-[10px] leading-4 text-sidebar-foreground/60">
-                  HECSN Neural Engine
+                  Cognitive Runtime
                 </div>
               </div>
               {/* Heartbeat dot */}
@@ -990,6 +1030,7 @@ function App() {
                         <item.icon className={activeSection === item.id ? 'text-purple-400' : ''} />
                         <span>{item.label}</span>
                       </SidebarMenuButton>
+                      {item.id === 'sensory' ? <SidebarMenuBadge>{brainRuntime?.multimodal?.recent_preview_count ?? 0}</SidebarMenuBadge> : null}
                       {item.id === 'checkpoints' ? <SidebarMenuBadge>{checkpoints.length}</SidebarMenuBadge> : null}
                       {item.id === 'traces' ? <SidebarMenuBadge>{status?.trace_history_size ?? traces.length}</SidebarMenuBadge> : null}
                     </SidebarMenuItem>
@@ -1011,7 +1052,7 @@ function App() {
                   } />
                   <QuickStatRow label="Tokens" value={status?.token_count?.toLocaleString() || '—'} />
                   <QuickStatRow label="Checkpoint" value={checkpointName} truncate />
-                  <QuickStatRow label="Terminus" value={
+                  <QuickStatRow label="Brain" value={
                     brainRuntime?.running ? '● running' : brainRuntime?.configured ? '○ idle' : '— unconfigured'
                   } />
                   <QuickStatRow label="Last trace" value={formatWhen(status?.last_trace_created_at)} />

@@ -52,7 +52,7 @@ const CHART_CLASS = 'h-[180px] w-full aspect-auto'
 /* -------------------------------------------------------------------------- */
 function QuickStartStrip({ apiBase, brainRuntime, pendingAction, stopBrain, refreshStatus }) {
   const [presets, setPresets] = useState([])
-  const [selectedPreset, setSelectedPreset] = useState('wikipedia')
+  const [selectedPreset, setSelectedPreset] = useState('curriculum')
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState('')
 
@@ -60,7 +60,12 @@ function QuickStartStrip({ apiBase, brainRuntime, pendingAction, stopBrain, refr
     if (!apiBase) return
     fetch(`${apiBase}/terminus/presets`)
       .then((r) => r.json())
-      .then((data) => { if (Array.isArray(data)) setPresets(data) })
+      .then((data) => {
+        if (!Array.isArray(data)) return
+        setPresets(data)
+        const recommended = data.find((preset) => preset?.default)?.id || data[0]?.id
+        if (recommended) setSelectedPreset(recommended)
+      })
       .catch(() => {})
   }, [apiBase])
 
@@ -313,15 +318,18 @@ export default function AskSection({
 
   const multimodal = brainRuntime?.multimodal
   const isRunning = brainRuntime?.running
+  const realEpisodeInterval = Number(multimodal?.real_episode_interval || 0)
+  const tokensSinceReal = Number(multimodal?.tokens_since_real_episode || 0)
+  const tokensUntilReal = realEpisodeInterval > 0 ? Math.max(0, realEpisodeInterval - tokensSinceReal) : null
 
   return (
     <section id="ask" className="flex flex-col h-[calc(100vh-6rem)]">
       {/* Header strip */}
       <div className="flex items-center justify-between gap-3 px-1 pb-3 shrink-0">
         <div className="space-y-0.5">
-          <h2 className="text-lg font-semibold tracking-tight">Terminus</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Workspace</h2>
           <p className="text-xs text-muted-foreground">
-            Conversational interface — ask grounded questions and manage the training loop.
+            Ask grounded questions, inspect evidence, and steer the live Terminus brain.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -333,13 +341,13 @@ export default function AskSection({
           )}
           {multimodal?.enabled && (
             <Badge variant="outline" className="text-xs">
-              MM: {multimodal.episodes_completed} ep
+              Sensory: {multimodal.real_episodes_completed ?? multimodal.episodes_completed ?? 0} ep
             </Badge>
           )}
         </div>
       </div>
 
-      {/* Collapsible Terminus controls */}
+      {/* Collapsible brain controls */}
       <Collapsible open={controlsOpen} onOpenChange={setControlsOpen} className="shrink-0">
         <div className="flex items-center gap-2 border rounded-lg px-3 py-2 bg-card mb-3">
           <CollapsibleTrigger asChild>
@@ -377,8 +385,8 @@ export default function AskSection({
 
             {multimodal?.enabled && (
               <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-                <DetailItem label="MM episodes" value={multimodal.episodes_completed} />
-                <DetailItem label="Next episode in" value={`${multimodal.episode_interval - multimodal.tokens_since_episode} tok`} />
+                <DetailItem label="Real sensory episodes" value={multimodal.real_episodes_completed ?? multimodal.episodes_completed} />
+                <DetailItem label="Next real episode in" value={tokensUntilReal != null ? `${tokensUntilReal} tok` : 'n/a'} />
                 <DetailItem label="Visual accepted" value={multimodal.cross_modal_visual_accepted} />
                 <DetailItem label="Audio accepted" value={multimodal.cross_modal_audio_accepted} />
               </div>

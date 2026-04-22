@@ -10,8 +10,8 @@ export default function RuntimeSection({ checkpointMetadata, columnInputWeights,
   return (
     <section id="runtime" className="space-y-4">
       <SectionHeading
-        title="Runtime"
-        description="The loaded model, checkpoint metadata, routing index, and memory store in simpler operator-friendly language."
+        title="Systems"
+        description="The loaded model, checkpoint metadata, routing index, memory store, and live sensory runtime in operator-friendly language."
         badge={<Badge variant="outline">{runtimeScope.stage || 'stage n/a'}</Badge>}
       />
 
@@ -23,7 +23,7 @@ export default function RuntimeSection({ checkpointMetadata, columnInputWeights,
               Live loop
               {brain?.running && <Badge variant="secondary" className="text-[10px] animate-pulse">running</Badge>}
             </CardTitle>
-            <CardDescription>Real-time training loop counters from the Terminus brain tick.</CardDescription>
+            <CardDescription>Real-time training loop counters from the live Terminus brain tick.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">
             <DetailItem label="Token count" value={status?.token_count?.toLocaleString?.() ?? 'n/a'} help="Total tokens processed since checkpoint load. This is the global training counter." />
@@ -117,30 +117,36 @@ export default function RuntimeSection({ checkpointMetadata, columnInputWeights,
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              Multimodal
+              Sensory grounding
               {brain?.multimodal?.enabled && <Badge variant="secondary" className="text-[10px]">active</Badge>}
             </CardTitle>
-            <CardDescription>Cross-modal training status — visual (N-MNIST), audio (FSDD), and text binding.</CardDescription>
+            <CardDescription>Real Hugging Face image/audio grounding plus auxiliary curriculum hints.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">
-            <DetailItem label="Enabled" value={brain?.multimodal?.enabled ? 'Yes' : 'No'} help="Whether multimodal training is active. When enabled, visual and audio episodes run alongside text training." />
-            <DetailItem label="Visual accepted" value={brain?.multimodal?.cross_modal_visual_accepted ?? 'n/a'} help="Total visual patterns (N-MNIST digits) that passed the cross-modal acceptance gate and were bound to text representations." />
-            <DetailItem label="Audio accepted" value={brain?.multimodal?.cross_modal_audio_accepted ?? 'n/a'} help="Total audio patterns (FSDD spoken digits) that passed the cross-modal acceptance gate and were bound to text representations." />
-            <DetailItem label="Cross-modal dim" value={brain?.multimodal?.cross_modal_dim_visual != null ? `V=${brain.multimodal.cross_modal_dim_visual} A=${brain.multimodal.cross_modal_dim_audio ?? 'n/a'}` : 'n/a'} help="Dimensionality of the cross-modal projection layers. Visual and audio have separate projection matrices." />
+            <DetailItem label="Enabled" value={brain?.multimodal?.enabled ? 'Yes' : 'No'} help="Whether real sensory grounding is active. When enabled, image/audio episodes run alongside the text curriculum." />
+            <DetailItem label="Mode" value={brain?.multimodal?.mode ?? 'n/a'} help="Which sensory paths are currently enabled. This can include real HF streams, curriculum hints, or both." />
+            <DetailItem label="Real episodes" value={brain?.multimodal?.real_episodes_completed ?? 'n/a'} help="How many real Hugging Face sensory episodes have been injected so far." />
+            <DetailItem label="Hints" value={brain?.multimodal?.hint_episodes_completed ?? 'n/a'} help="How many curriculum-derived auxiliary hint episodes have been injected." />
+            <DetailItem label="Visual accepted" value={brain?.multimodal?.cross_modal_visual_accepted ?? 'n/a'} help="Total visual bindings accepted by the cross-modal gate across real and hint episodes." />
+            <DetailItem label="Audio accepted" value={brain?.multimodal?.cross_modal_audio_accepted ?? 'n/a'} help="Total audio bindings accepted by the cross-modal gate across real and hint episodes." />
+            <DetailItem label="Visual confidence" value={formatFloat(brain?.multimodal?.visual_confidence_mean, 3)} help="Mean visual grounding confidence from the cross-modal layer." />
+            <DetailItem label="Audio confidence" value={formatFloat(brain?.multimodal?.audio_confidence_mean, 3)} help="Mean audio grounding confidence from the cross-modal layer." />
+            <DetailItem label="Recent previews" value={brain?.multimodal?.recent_preview_count ?? 'n/a'} help="How many recent real image/audio previews are available for the Sensory tab." />
+            <DetailItem label="Focus terms" value={Array.isArray(brain?.multimodal?.focus_terms) && brain.multimodal.focus_terms.length ? brain.multimodal.focus_terms.slice(0, 3).join(', ') : 'n/a'} help="Terms currently steering semantic sensory routing." />
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              Cortex
+              Mind
               {brain?.cortex?.running && <Badge variant="secondary" className="text-[10px] animate-pulse">thinking</Badge>}
             </CardTitle>
-            <CardDescription>LLM-powered thought generation via NVIDIA NIM -- the neocortex of the living brain.</CardDescription>
+            <CardDescription>LLM-powered thought generation via NVIDIA NIM — the mind layer of the living brain.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">
-            <DetailItem label="Enabled" value={brain?.cortex?.enabled ? 'Yes' : 'No'} help="Whether the Cortex (LLM thought loop) is active. Requires NVIDIA_API_KEY set in .env." />
-            <DetailItem label="Thoughts" value={brain?.cortex?.thoughts_generated ?? 'n/a'} help="Total autonomous thoughts generated by the Cortex since startup." />
+            <DetailItem label="Enabled" value={brain?.cortex?.enabled ? 'Yes' : 'No'} help="Whether the mind layer (LLM thought loop) is active. Requires NVIDIA_API_KEY set in .env." />
+            <DetailItem label="Thoughts" value={brain?.cortex?.thoughts_generated ?? 'n/a'} help="Total autonomous thoughts generated by the mind layer since startup." />
             <DetailItem label="Avg inference" value={brain?.cortex?.avg_inference_ms != null ? `${brain.cortex.avg_inference_ms.toFixed(0)} ms` : 'n/a'} help="Average time per LLM inference call. Lower is better; depends on model size and hardware." />
             <DetailItem label="Memory" value={brain?.cortex?.memory_count != null ? `${brain.cortex.memory_count} / 2048` : 'n/a'} help="Episodic memory entries stored by the Cortex. Includes observations from SNN, inferences, and dreams." />
             <DetailItem label="Mode" value={brain?.cortex?.current_mode ?? 'n/a'} help="Current thinking mode: idle (waiting), thinking (generating), reflecting (self-critique), dreaming (sleep consolidation)." />
