@@ -14,8 +14,11 @@ import {
   LayersIcon,
   LoaderCircleIcon,
   MessageSquareTextIcon,
+  PlayIcon,
+  RotateCwIcon,
   SettingsIcon,
   ShieldCheckIcon,
+  SquareIcon,
   TrendingUpIcon,
   WifiIcon,
   WifiOffIcon,
@@ -48,6 +51,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import {
   DEFAULT_API_BASE,
   fileName,
+  formatMode,
   formatWhen,
   normalizeApiBase,
 } from '@/lib/dashboard-utils'
@@ -67,87 +71,110 @@ const DevelopmentalSection = lazy(() => import('@/components/dashboard/Developme
 const TrainingSection = lazy(() => import('@/components/dashboard/TrainingSection'))
 const CortexSection = lazy(() => import('@/components/dashboard/CortexSection'))
 const SensorySection = lazy(() => import('@/components/dashboard/SensorySection'))
+const ValidationSection = lazy(() => import('@/components/dashboard/ValidationSection'))
 
 const SECTIONS = [
   {
     id: 'overview',
     label: 'Overview',
     icon: BarChart3Icon,
+    group: 'Monitor',
     help: 'Live summary cards and stable telemetry charts.',
   },
   {
     id: 'cortex',
     label: 'Mind',
     icon: BrainIcon,
+    group: 'Monitor',
     help: 'Living mind — thought stream, drives, and deliberation state powered by the NVIDIA NIM cortex.',
   },
   {
     id: 'sensory',
     label: 'Sensory',
     icon: AudioLinesIcon,
+    group: 'Monitor',
     help: 'Real image/audio grounding from Hugging Face with semantic routing and live previews.',
   },
   {
     id: 'architecture',
     label: 'Model',
     icon: LayersIcon,
+    group: 'Model',
     help: 'SVG diagram of the active model layers and their configuration.',
   },
   {
     id: 'animation',
     label: 'Dynamics',
     icon: ActivityIcon,
+    group: 'Monitor',
     help: 'Live spike flow, column activations, neuromodulators, and memory state.',
   },
   {
     id: 'neuralspace',
     label: 'Neural Space',
     icon: BoxIcon,
+    group: 'Monitor',
     help: '3D WebGL visualization of the neural network — columns, spikes, and cross-modal beams in real time.',
   },
   {
     id: 'training',
     label: 'Learning',
     icon: TrendingUpIcon,
+    group: 'Evidence',
     help: 'Live learning metrics: grounding confidence, reconstruction error, and neuromodulator dynamics.',
   },
   {
     id: 'ask',
     label: 'Workspace',
     icon: MessageSquareTextIcon,
+    group: 'Control',
     help: 'Inspect routing, evidence, and grounded answers.',
   },
   {
     id: 'grounding',
     label: 'Grounding',
     icon: FlaskConicalIcon,
+    group: 'Evidence',
     help: 'Run the 50-triple grounding probe and view concrete vs abstract accuracy.',
+  },
+  {
+    id: 'validation',
+    label: 'Validation',
+    icon: ShieldCheckIcon,
+    group: 'Evidence',
+    help: 'Browse saved Phase 14/15 reports, safety gates, and operator-visible evidence.',
   },
   {
     id: 'runtime',
     label: 'Systems',
     icon: CpuIcon,
+    group: 'Control',
     help: 'Model, memory, routing, and runtime internals for the active checkpoint.',
   },
   {
     id: 'developmental',
     label: 'Growth',
     icon: GraduationCapIcon,
+    group: 'Model',
     help: 'Stage progress, plasticity mode, and maturity indicators.',
   },
   {
     id: 'checkpoints',
     label: 'Checkpoints',
     icon: ArchiveIcon,
+    group: 'Control',
     help: 'Save the current runtime or restore a stored snapshot.',
   },
   {
     id: 'traces',
     label: 'Traces',
     icon: HistoryIcon,
+    group: 'Evidence',
     help: 'Open stored traces and review prior requests, evidence, and routes.',
   },
 ]
+
+const SECTION_GROUPS = ['Monitor', 'Control', 'Evidence', 'Model']
 
 const SECTION_TITLES = {
   overview: 'Overview',
@@ -159,6 +186,7 @@ const SECTION_TITLES = {
   training: 'Learning Monitor',
   ask: 'Workspace',
   grounding: 'Grounding Probe',
+  validation: 'Validation Evidence',
   runtime: 'Systems & Runtime',
   developmental: 'Growth Stages',
   checkpoints: 'Checkpoints',
@@ -926,6 +954,10 @@ function App() {
         return (
           <GroundingProbeSection apiBase={apiBase} />
         )
+      case 'validation':
+        return (
+          <ValidationSection apiBase={apiBase} />
+        )
       case 'runtime':
         return (
           <RuntimeSection
@@ -972,10 +1004,18 @@ function App() {
         return (
           <OverviewSection
             activeResponse={activeResponse}
+            apiBase={apiBase}
+            brainRuntime={brainRuntime}
             checkpointName={checkpointName}
             memoryStore={memoryStore}
+            pendingAction={pendingAction}
+            selectSection={selectSection}
+            startBrain={startBrain}
             status={status}
+            stopBrain={stopBrain}
+            streamConnected={streamConnected}
             telemetryData={telemetryData}
+            tickBrain={tickBrain}
           />
         )
     }
@@ -989,9 +1029,9 @@ function App() {
             <button
               type="button"
               onClick={() => selectSection('overview')}
-              className="flex w-full items-center gap-3 rounded-lg bg-gradient-to-r from-purple-500/10 to-blue-500/10 p-3 text-left transition-all hover:from-purple-500/15 hover:to-blue-500/15"
+              className="flex w-full items-center gap-3 rounded-lg border bg-sidebar-accent/25 p-3 text-left transition-colors hover:bg-sidebar-accent/40"
             >
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-purple-600 to-blue-600 text-white shadow-md shadow-purple-500/25">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                 <BrainIcon className="size-4" />
               </div>
               <div className="min-w-0">
@@ -1014,30 +1054,32 @@ function App() {
           </SidebarHeader>
 
           <SidebarContent>
-            <SidebarGroup>
-              <SidebarGroupLabel className="text-[10px] uppercase tracking-widest">Dashboard</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {SECTIONS.map((item) => (
-                    <SidebarMenuItem key={item.id}>
-                      <SidebarMenuButton
-                        type="button"
-                        isActive={activeSection === item.id}
-                        onClick={() => selectSection(item.id)}
-                        tooltip={item.help}
-                        className={activeSection === item.id ? 'bg-sidebar-accent/60' : ''}
-                      >
-                        <item.icon className={activeSection === item.id ? 'text-purple-400' : ''} />
-                        <span>{item.label}</span>
-                      </SidebarMenuButton>
-                      {item.id === 'sensory' ? <SidebarMenuBadge>{brainRuntime?.multimodal?.recent_preview_count ?? 0}</SidebarMenuBadge> : null}
-                      {item.id === 'checkpoints' ? <SidebarMenuBadge>{checkpoints.length}</SidebarMenuBadge> : null}
-                      {item.id === 'traces' ? <SidebarMenuBadge>{status?.trace_history_size ?? traces.length}</SidebarMenuBadge> : null}
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
+            {SECTION_GROUPS.map((group) => (
+              <SidebarGroup key={group}>
+                <SidebarGroupLabel className="text-[10px] uppercase tracking-widest">{group}</SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {SECTIONS.filter((item) => item.group === group).map((item) => (
+                      <SidebarMenuItem key={item.id}>
+                        <SidebarMenuButton
+                          type="button"
+                          isActive={activeSection === item.id}
+                          onClick={() => selectSection(item.id)}
+                          tooltip={item.help}
+                          className={activeSection === item.id ? 'bg-sidebar-accent/60' : ''}
+                        >
+                          <item.icon className={activeSection === item.id ? 'text-primary' : ''} />
+                          <span>{item.label}</span>
+                        </SidebarMenuButton>
+                        {item.id === 'sensory' ? <SidebarMenuBadge>{brainRuntime?.multimodal?.recent_preview_count ?? 0}</SidebarMenuBadge> : null}
+                        {item.id === 'checkpoints' ? <SidebarMenuBadge>{checkpoints.length}</SidebarMenuBadge> : null}
+                        {item.id === 'traces' ? <SidebarMenuBadge>{status?.trace_history_size ?? traces.length}</SidebarMenuBadge> : null}
+                      </SidebarMenuItem>
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            ))}
 
             <SidebarSeparator />
 
@@ -1062,7 +1104,7 @@ function App() {
           </SidebarContent>
 
           <SidebarFooter>
-            <div className="rounded-lg bg-purple-500/5 p-3 text-xs text-sidebar-foreground/60">
+            <div className="rounded-lg border bg-sidebar-accent/20 p-3 text-xs text-sidebar-foreground/60">
               <div className="flex items-center gap-1.5 font-medium text-sidebar-foreground/80">
                 <ShieldCheckIcon className="size-3" />
                 Evidence mode
@@ -1074,40 +1116,77 @@ function App() {
         </Sidebar>
 
         <SidebarInset className="min-w-0 bg-background">
-          {/* Compact header with KPI strip */}
           <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur-sm">
-            <div className="flex items-center justify-between gap-4 px-4 py-2.5 md:px-6">
-              <div className="flex items-center gap-3">
-                <SidebarTrigger />
-                <div className="hidden h-5 w-px bg-border sm:block" />
-                <h1 className="text-sm font-semibold tracking-tight sm:text-base">
-                  {SECTION_TITLES[activeSection] || 'Overview'}
-                </h1>
+            <div className="flex flex-col gap-3 px-4 py-3 md:px-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <SidebarTrigger />
+                  <div className="hidden h-5 w-px bg-border sm:block" />
+                  <div className="min-w-0">
+                    <h1 className="truncate text-sm font-semibold tracking-tight sm:text-base">
+                      {SECTION_TITLES[activeSection] || 'Overview'}
+                    </h1>
+                    <p className="hidden text-xs text-muted-foreground md:block">
+                      {formatMode(brainRuntime?.runtime_truth?.verdict || status?.runtime_truth?.verdict || 'runtime truth pending')}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
+                  <KpiChip icon={streamConnected ? WifiIcon : WifiOffIcon} active={streamConnected}>
+                    {streamConnected ? 'Live' : 'Offline'}
+                  </KpiChip>
+                  <KpiChip icon={ActivityIcon} active={!!status?.token_count}>
+                    {status?.token_count?.toLocaleString() || '0'} tokens
+                  </KpiChip>
+                  {status?.dirty_state && (
+                    <KpiChip icon={AlertCircleIcon} active={false}>Unsaved</KpiChip>
+                  )}
+                  <Button
+                    type="button"
+                    variant={brainRuntime?.running ? 'secondary' : 'default'}
+                    size="sm"
+                    onClick={startBrain}
+                    disabled={!!pendingAction || brainRuntime?.running}
+                  >
+                    <PlayIcon className="size-3.5" />
+                    Start
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={tickBrain}
+                    disabled={!!pendingAction || !brainRuntime?.configured}
+                  >
+                    <RotateCwIcon className="size-3.5" />
+                    Tick
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={stopBrain}
+                    disabled={!!pendingAction || !brainRuntime?.running}
+                  >
+                    <SquareIcon className="size-3.5" />
+                    Stop
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => setShowConfig(c => !c)}
+                    title="Toggle config panel"
+                    aria-label="Toggle config panel"
+                  >
+                    <SettingsIcon className="size-3.5" />
+                  </Button>
+                </div>
               </div>
 
-              {/* KPI strip */}
-              <div className="flex items-center gap-3 text-xs">
-                <KpiChip icon={streamConnected ? WifiIcon : WifiOffIcon} active={streamConnected}>
-                  {streamConnected ? 'Live' : 'Offline'}
-                </KpiChip>
-                <KpiChip icon={ActivityIcon} active={!!status?.token_count}>
-                  {status?.token_count?.toLocaleString() || '0'} tokens
-                </KpiChip>
-                {status?.dirty_state && (
-                  <KpiChip icon={AlertCircleIcon} active={false}>Unsaved</KpiChip>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setShowConfig(c => !c)}
-                  className="rounded-full border border-border/50 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                  title="Toggle config panel"
-                >
-                  <SettingsIcon className="size-3.5" />
-                </button>
-              </div>
             </div>
 
-            {/* Config bar — collapsible */}
             {showConfig && (
               <div className="border-t bg-muted/30 px-4 py-2 md:px-6">
                 <div className="flex flex-wrap items-end gap-3">

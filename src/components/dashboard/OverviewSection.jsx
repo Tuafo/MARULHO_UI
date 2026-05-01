@@ -2,9 +2,16 @@ import {
   ActivityIcon,
   BrainIcon,
   DatabaseIcon,
+  FileTextIcon,
   HardDriveIcon,
   LinkIcon,
+  MessageSquareTextIcon,
+  PlayIcon,
+  RotateCwIcon,
+  RouteIcon,
+  ServerIcon,
   ShieldCheckIcon,
+  SquareIcon,
   ZapIcon,
 } from 'lucide-react'
 import {
@@ -18,6 +25,7 @@ import {
 } from 'recharts'
 
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Card,
   CardAction,
@@ -90,27 +98,148 @@ function buildTelemetryWindow(telemetryData) {
   }))
 }
 
-export default function OverviewSection({ activeResponse, checkpointName, memoryStore, status, telemetryData }) {
+export default function OverviewSection({
+  activeResponse,
+  apiBase,
+  brainRuntime,
+  checkpointName,
+  memoryStore,
+  pendingAction,
+  selectSection,
+  startBrain,
+  status,
+  stopBrain,
+  streamConnected,
+  telemetryData,
+  tickBrain,
+}) {
   const tokenDomain = nicePositiveDomain(telemetryData.map((item) => item.tokens), 1000)
   const windowedTelemetryData = buildTelemetryWindow(telemetryData)
   const animation = status?.animation || {}
   const crossModal = animation.cross_modal
   const contextTau = animation.context_tau
   const runtimeScope = status?.runtime_scope || {}
-  const brain = status?.terminus_runtime
+  const brain = brainRuntime || status?.terminus_runtime
 
   const tokenSparkline = telemetryData.slice(-20).map((d) => d.tokens ?? 0)
   const memorySparkline = telemetryData.slice(-20).map((d) => d.memoryFill ?? 0)
+  const startDisabled = Boolean(pendingAction || brain?.running)
+  const tickDisabled = Boolean(pendingAction || !brain?.configured)
+  const stopDisabled = Boolean(pendingAction || !brain?.running)
 
   return (
     <section id="overview" className="space-y-4">
       <SectionHeading
-        title="Overview"
-        description="A quick read of session activity, memory pressure, answer support, and the currently loaded checkpoint."
+        title="Startup Dashboard"
+        description="Live service state, runtime controls, validation evidence, and the main operator paths in one place."
         badge={<Badge variant="outline">rev {status?.state_revision ?? 'n/a'}</Badge>}
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+        <Card>
+          <CardHeader className="border-b">
+            <div className="flex items-start gap-3">
+              <div className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                <ServerIcon className="size-4" />
+              </div>
+              <div className="space-y-1">
+                <CardTitle>Service & Runtime</CardTitle>
+                <CardDescription>Backend stream, checkpoint attachment, and Terminus loop state.</CardDescription>
+              </div>
+            </div>
+            <CardAction>
+              <Badge variant={streamConnected ? 'secondary' : 'destructive'}>
+                {streamConnected ? 'stream live' : 'stream offline'}
+              </Badge>
+            </CardAction>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-4">
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <p className="text-xs text-muted-foreground">API base</p>
+                <p className="truncate font-mono text-xs font-medium">{apiBase}</p>
+              </div>
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <p className="text-xs text-muted-foreground">Runtime</p>
+                <p className="text-sm font-medium">{brain?.running ? 'Running' : brain?.configured ? 'Ready' : 'Unconfigured'}</p>
+              </div>
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <p className="text-xs text-muted-foreground">Ticks</p>
+                <p className="text-sm font-medium">{brain?.tick_count?.toLocaleString?.() ?? brain?.tick_count ?? 0}</p>
+              </div>
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <p className="text-xs text-muted-foreground">Background tokens</p>
+                <p className="text-sm font-medium">{brain?.background_tokens_processed?.toLocaleString?.() ?? brain?.background_tokens_processed ?? 0}</p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" onClick={startBrain} disabled={startDisabled}>
+                <PlayIcon className="size-3.5" />
+                Start loop
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={tickBrain} disabled={tickDisabled}>
+                <RotateCwIcon className="size-3.5" />
+                Tick
+              </Button>
+              <Button type="button" size="sm" variant="destructive" onClick={stopBrain} disabled={stopDisabled}>
+                <SquareIcon className="size-3.5" />
+                Stop
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => selectSection('runtime')}>
+                <RouteIcon className="size-3.5" />
+                Systems
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="border-b">
+            <div className="flex items-start gap-3">
+              <div className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                <BrainIcon className="size-4" />
+              </div>
+              <div className="space-y-1">
+                <CardTitle>Operator Paths</CardTitle>
+                <CardDescription>Primary workflows backed by service endpoints.</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-2 sm:grid-cols-2">
+            <Button type="button" variant="outline" className="h-auto justify-start gap-3 p-3" onClick={() => selectSection('ask')}>
+              <MessageSquareTextIcon className="size-4 text-primary" />
+              <span className="text-left">
+                <span className="block text-sm font-medium">Workspace</span>
+                <span className="block text-xs text-muted-foreground">Ask, inspect, learn</span>
+              </span>
+            </Button>
+            <Button type="button" variant="outline" className="h-auto justify-start gap-3 p-3" onClick={() => selectSection('validation')}>
+              <ShieldCheckIcon className="size-4 text-primary" />
+              <span className="text-left">
+                <span className="block text-sm font-medium">Validation</span>
+                <span className="block text-xs text-muted-foreground">Reports, gates, evidence</span>
+              </span>
+            </Button>
+            <Button type="button" variant="outline" className="h-auto justify-start gap-3 p-3" onClick={() => selectSection('cortex')}>
+              <BrainIcon className="size-4 text-primary" />
+              <span className="text-left">
+                <span className="block text-sm font-medium">Mind</span>
+                <span className="block text-xs text-muted-foreground">Thought stream</span>
+              </span>
+            </Button>
+            <Button type="button" variant="outline" className="h-auto justify-start gap-3 p-3" onClick={() => selectSection('traces')}>
+              <FileTextIcon className="size-4 text-primary" />
+              <span className="text-left">
+                <span className="block text-sm font-medium">Traces</span>
+                <span className="block text-xs text-muted-foreground">Execution history</span>
+              </span>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <MetricCard
           icon={ActivityIcon}
           title="Tokens seen"
