@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  BrainIcon,
   DatabaseIcon,
   LayersIcon,
   LinkIcon,
@@ -111,7 +110,6 @@ export default function ArchitectureSection({ apiBase }) {
   const contextLayer = layerMap.context_prediction || {}
   const groundingLayer = layerMap.cross_modal_grounding || {}
   const memoryLayer = layerMap.memory_consolidation || {}
-  const cortexLayer = layerMap.nim_cortex || {}
   const autonomyLayer = layerMap.autonomy_curriculum || {}
 
   const enabledLayers = layers.filter((layer) => layer.enabled)
@@ -134,9 +132,7 @@ export default function ArchitectureSection({ apiBase }) {
       `memory ${formatParamValue(memoryLayer?.params?.memory_capacity)}`,
       `sensory ${formatParamValue(groundingLayer?.params?.sensory_active)}`,
     ],
-    mind: [
-      `mind ${formatParamValue(cortexLayer?.enabled)}`,
-      `${formatParamValue(cortexLayer?.params?.thoughts_generated)} thoughts`,
+    autonomy: [
       `curriculum ${formatParamValue(autonomyLayer?.params?.curriculum_enabled)}`,
       `sensory ${formatParamValue(autonomyLayer?.params?.sensory_enabled)}`,
     ],
@@ -146,7 +142,7 @@ export default function ArchitectureSection({ apiBase }) {
     <section className="space-y-4">
       <SectionHeading
         title="Model"
-        description="Current Terminus topology: GPCSN column field, predictive/context dynamics, real cross-modal grounding, dual memory, and the NIM mind layer."
+        description="Current Terminus topology: GPCSN column field, predictive/context dynamics, real cross-modal grounding, dual memory, and active exploration."
         badge={<Badge variant="outline">{architecture?.family || 'hybrid runtime'}</Badge>}
       />
 
@@ -164,7 +160,7 @@ export default function ArchitectureSection({ apiBase }) {
 
       {architecture ? (
         <>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-3">
             <SummaryCard
               icon={LayersIcon}
               title="GPCSN core"
@@ -186,13 +182,6 @@ export default function ArchitectureSection({ apiBase }) {
               description="Real cross-modal alignment and sensory runtime dimensions."
               value={`V ${formatParamValue(groundingLayer?.params?.dim_visual)} · A ${formatParamValue(groundingLayer?.params?.dim_audio)}`}
               badge={<Badge variant={groundingLayer?.enabled ? 'secondary' : 'outline'}>{groundingLayer?.enabled ? 'cross-modal on' : 'cross-modal off'}</Badge>}
-            />
-            <SummaryCard
-              icon={BrainIcon}
-              title="Mind layer"
-              description="NIM-powered thought loop, working memory, and narrative state."
-              value={formatParamValue(cortexLayer?.params?.thoughts_generated)}
-              badge={<Badge variant={cortexLayer?.enabled ? 'secondary' : 'outline'}>{cortexLayer?.enabled ? 'NIM active' : 'disabled'}</Badge>}
             />
           </div>
 
@@ -239,13 +228,13 @@ export default function ArchitectureSection({ apiBase }) {
                 <div className="hidden xl:flex items-center justify-center text-muted-foreground">→</div>
                 <StageCard
                   accentClass="bg-emerald-500/5"
-                  subtitle="Mind + autonomy"
-                  title="NIM mind layer + active exploration"
-                  chips={stageChips.mind}
+                  subtitle="Autonomy"
+                  title="Active exploration + policy evidence"
+                  chips={stageChips.autonomy}
                 />
               </div>
               <p className="text-sm text-muted-foreground">
-                Terminus is a live system, a hybrid runtime: GPCSN provides grounded sparse structure, while the NIM mind layer provides deliberation, working memory, and narrative continuity.
+                Terminus is a live system: GPCSN provides grounded sparse structure, while active exploration, replay, and policy evidence carry the runtime cognition path.
               </p>
             </CardContent>
           </Card>

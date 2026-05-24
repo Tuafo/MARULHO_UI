@@ -69,7 +69,6 @@ const NeuralSpaceSection = lazy(() => import('@/components/dashboard/NeuralSpace
 const GroundingProbeSection = lazy(() => import('@/components/dashboard/GroundingProbeSection'))
 const DevelopmentalSection = lazy(() => import('@/components/dashboard/DevelopmentalSection'))
 const TrainingSection = lazy(() => import('@/components/dashboard/TrainingSection'))
-const CortexSection = lazy(() => import('@/components/dashboard/CortexSection'))
 const SensorySection = lazy(() => import('@/components/dashboard/SensorySection'))
 const ValidationSection = lazy(() => import('@/components/dashboard/ValidationSection'))
 
@@ -80,13 +79,6 @@ const SECTIONS = [
     icon: BarChart3Icon,
     group: 'Monitor',
     help: 'Live summary cards and stable telemetry charts.',
-  },
-  {
-    id: 'cortex',
-    label: 'Mind',
-    icon: BrainIcon,
-    group: 'Monitor',
-    help: 'Living mind — thought stream, drives, and deliberation state powered by the NVIDIA NIM cortex.',
   },
   {
     id: 'sensory',
@@ -887,13 +879,6 @@ function App() {
 
   function renderActiveSection() {
     switch (activeSection) {
-      case 'cortex':
-        return (
-          <CortexSection
-            apiBase={apiBase}
-            status={status}
-          />
-        )
       case 'sensory':
         return (
           <SensorySection
