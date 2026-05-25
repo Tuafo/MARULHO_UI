@@ -170,7 +170,6 @@ const SECTION_GROUPS = ['Monitor', 'Control', 'Evidence', 'Model']
 
 const SECTION_TITLES = {
   overview: 'Overview',
-  cortex: 'Mind Monitor',
   sensory: 'Sensory Feed',
   architecture: 'Model Architecture',
   animation: 'Neural Dynamics',

@@ -221,11 +221,11 @@ export default function OverviewSection({
                 <span className="block text-xs text-muted-foreground">Reports, gates, evidence</span>
               </span>
             </Button>
-            <Button type="button" variant="outline" className="h-auto justify-start gap-3 p-3" onClick={() => selectSection('cortex')}>
+            <Button type="button" variant="outline" className="h-auto justify-start gap-3 p-3" onClick={() => selectSection('animation')}>
               <BrainIcon className="size-4 text-primary" />
               <span className="text-left">
-                <span className="block text-sm font-medium">Mind</span>
-                <span className="block text-xs text-muted-foreground">Thought stream</span>
+                <span className="block text-sm font-medium">Subcortex</span>
+                <span className="block text-xs text-muted-foreground">Spike dynamics</span>
               </span>
             </Button>
             <Button type="button" variant="outline" className="h-auto justify-start gap-3 p-3" onClick={() => selectSection('traces')}>
@@ -284,15 +284,12 @@ export default function OverviewSection({
           icon={BrainIcon}
           title="Living brain"
           value={brain?.running ? 'Active' : 'Idle'}
-          description={brain?.cortex?.enabled
-            ? `${brain.cortex.thoughts_generated ?? 0} thoughts · ${brain.multimodal?.cross_modal_visual_accepted ?? 0}V/${brain.multimodal?.cross_modal_audio_accepted ?? 0}A bound · ${brain.multimodal?.recent_preview_count ?? 0} previews`
-            : 'Mind layer not enabled'
-          }
+          description={`${brain?.multimodal?.cross_modal_visual_accepted ?? 0}V/${brain?.multimodal?.cross_modal_audio_accepted ?? 0}A bound · ${brain?.multimodal?.recent_preview_count ?? 0} previews`}
           badge={brain?.multimodal?.enabled
             ? <Badge variant="secondary">sensory active</Badge>
             : <Badge variant="outline">text only</Badge>
           }
-          help="The active Terminus brain — SNN training, real sensory grounding, and NIM thought generation. Shows thought count, cross-modal binding counts, and preview availability."
+          help="The active Terminus brain: SNN training, real sensory grounding, replay, policy pressure, and runtime-truth evidence."
         />
       </div>
 

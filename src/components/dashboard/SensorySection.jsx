@@ -501,7 +501,7 @@ export default function SensorySection({ apiBase, brainRuntime }) {
           </div>
           <div className="rounded-xl border bg-background/60 p-4">
             <p className="text-xs uppercase tracking-wider text-muted-foreground">4. Bind</p>
-            <p className="mt-2 text-sm text-muted-foreground">The chosen caption, image/audio spikes, and accepted cross-modal bindings are fed back into memory and later thoughts.</p>
+            <p className="mt-2 text-sm text-muted-foreground">The chosen caption, image/audio spikes, and accepted cross-modal bindings are fed back into memory and later replay.</p>
           </div>
         </CardContent>
       </Card>
