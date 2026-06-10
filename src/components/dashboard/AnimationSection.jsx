@@ -182,7 +182,7 @@ function FlowInspectorPanel({ selectedTarget, animationData, brainRuntime, topSo
           { label: 'Recent previews', value: brainRuntime?.multimodal?.recent_preview_count ?? 0 },
         ]
         badges = ['visual grounding']
-        note = 'This lights up when Terminus selects a real image sample and binds it into the current state.'
+        note = 'This lights up when the runtime selects a real image sample and binds it into the current state.'
         break
       case 'audio':
         title = 'Audio grounding beam'
@@ -193,7 +193,7 @@ function FlowInspectorPanel({ selectedTarget, animationData, brainRuntime, topSo
           { label: 'Recent previews', value: brainRuntime?.multimodal?.recent_preview_count ?? 0 },
         ]
         badges = ['audio grounding']
-        note = 'This lights up when Terminus selects a real audio sample and binds it into the current state.'
+        note = 'This lights up when the runtime selects a real audio sample and binds it into the current state.'
         break
       default:
         break

@@ -11,12 +11,10 @@ import {
   SquareIcon,
   UserIcon,
 } from 'lucide-react'
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Collapsible,
@@ -32,19 +30,10 @@ import {
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
-import { fixedUnitDomain, formatFloat, formatPercent, formatMode, responseModeVariant } from '@/lib/dashboard-utils'
+import { formatFloat, formatPercent, formatMode, responseModeVariant } from '@/lib/dashboard-utils'
 import { cn } from '@/lib/utils'
-import { DetailItem } from '@/components/dashboard/shared'
+import { DetailItem, LightweightBarChart } from '@/components/dashboard/shared'
 
-/* -------------------------------------------------------------------------- */
-/*  Chart configs                                                              */
-/* -------------------------------------------------------------------------- */
-const CANDIDATE_CHART_CONFIG = {
-  similarity: { label: 'Similarity', color: 'var(--chart-1)' },
-}
-const EVIDENCE_CHART_CONFIG = {
-  similarity: { label: 'Evidence similarity', color: 'var(--chart-3)' },
-}
 const CHART_CLASS = 'h-[180px] w-full aspect-auto'
 
 /* -------------------------------------------------------------------------- */
@@ -204,15 +193,12 @@ function ResponseAnalysis({ query, response }) {
               <p className="text-xs text-muted-foreground">No evidence selected.</p>
             ) : (
               <>
-                <ChartContainer config={EVIDENCE_CHART_CONFIG} className={CHART_CLASS}>
-                  <BarChart data={evidenceData} margin={{ left: 4, right: 8, top: 4, bottom: 0 }}>
-                    <CartesianGrid vertical={false} />
-                    <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={4} tick={{ fontSize: 10 }} />
-                    <YAxis tickLine={false} axisLine={false} width={40} domain={fixedUnitDomain()} tickFormatter={(v) => `${Math.round(v * 100)}%`} tick={{ fontSize: 10 }} />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar dataKey="similarity" fill="var(--color-similarity)" radius={4} />
-                  </BarChart>
-                </ChartContainer>
+                <LightweightBarChart
+                  className={CHART_CLASS}
+                  data={evidenceData.map((item) => ({ ...item, fill: 'var(--chart-3)' }))}
+                  formatter={(value) => formatPercent(value, 0)}
+                  valueKey="similarity"
+                />
                 <div className="max-h-40 overflow-y-auto space-y-1">
                   {response.selected_evidence.map((item, i) => (
                     <div key={i} className="flex gap-2 text-xs border-b border-border/50 pb-1">
@@ -230,15 +216,12 @@ function ResponseAnalysis({ query, response }) {
             {!candidateData.length ? (
               <p className="text-xs text-muted-foreground">No routing data.</p>
             ) : (
-              <ChartContainer config={CANDIDATE_CHART_CONFIG} className={CHART_CLASS}>
-                <BarChart data={candidateData} margin={{ left: 4, right: 8, top: 4, bottom: 0 }}>
-                  <CartesianGrid vertical={false} />
-                  <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={4} tick={{ fontSize: 10 }} />
-                  <YAxis tickLine={false} axisLine={false} width={40} domain={fixedUnitDomain()} tickFormatter={(v) => `${Math.round(v * 100)}%`} tick={{ fontSize: 10 }} />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Bar dataKey="similarity" fill="var(--color-similarity)" radius={4} />
-                </BarChart>
-              </ChartContainer>
+              <LightweightBarChart
+                className={CHART_CLASS}
+                data={candidateData.map((item) => ({ ...item, fill: 'var(--chart-1)' }))}
+                formatter={(value) => formatPercent(value, 0)}
+                valueKey="similarity"
+              />
             )}
           </TabsContent>
         </Tabs>
@@ -327,9 +310,9 @@ export default function AskSection({
       {/* Header strip */}
       <div className="flex items-center justify-between gap-3 px-1 pb-3 shrink-0">
         <div className="space-y-0.5">
-          <h2 className="text-lg font-semibold tracking-tight">Workspace</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Grounded Interaction</h2>
           <p className="text-xs text-muted-foreground">
-            Ask grounded questions, inspect evidence, and steer the live Terminus brain.
+            Ask grounded questions, inspect evidence, and steer the live Subcortex runtime.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -347,7 +330,7 @@ export default function AskSection({
         </div>
       </div>
 
-      {/* Collapsible brain controls */}
+      {/* Collapsible runtime controls */}
       <Collapsible open={controlsOpen} onOpenChange={setControlsOpen} className="shrink-0">
         <div className="flex items-center gap-2 border rounded-lg px-3 py-2 bg-card mb-3">
           <CollapsibleTrigger asChild>

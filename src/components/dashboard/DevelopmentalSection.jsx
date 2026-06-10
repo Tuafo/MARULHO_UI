@@ -61,7 +61,7 @@ export default function DevelopmentalSection({ runtimeScope, status }) {
     return (
       <section className="space-y-4">
         <SectionHeading title="Developmental" description="Stage progress for the active runtime." />
-        <EmptyState title="Waiting for status" description="Connect to a running HECSN service to see developmental stages." />
+        <EmptyState title="Waiting for status" description="Connect to a running MARULHO service to see developmental stages." />
       </section>
     )
   }

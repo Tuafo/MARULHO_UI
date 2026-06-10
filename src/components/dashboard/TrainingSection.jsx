@@ -2,21 +2,9 @@ import { memo, useMemo } from 'react'
 import {
   BrainIcon,
   EyeIcon,
-  HeadphonesIcon,
   TrendingUpIcon,
   ZapIcon,
 } from 'lucide-react'
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Line,
-  LineChart,
-  XAxis,
-  YAxis,
-} from 'recharts'
 
 import { Badge } from '@/components/ui/badge'
 import {
@@ -27,52 +15,18 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import {
-  ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
-  ChartTooltip,
-  ChartTooltipContent,
-} from '@/components/ui/chart'
-import {
-  fixedUnitDomain,
   formatFloat,
   formatPercent,
 } from '@/lib/dashboard-utils'
-import { MetricCard, SectionHeading } from '@/components/dashboard/shared'
+import {
+  LightweightBarChart,
+  LightweightTimelineChart,
+  MetricCard,
+  SectionHeading,
+} from '@/components/dashboard/shared'
 
 const CHART_CLASS = 'h-[200px] w-full aspect-auto'
 const LIVE_SAMPLE_WINDOW = 80
-const LIVE_WINDOW_TICKS = [1, 20, 40, 60, 80]
-
-const GROUNDING_CHART_CONFIG = {
-  avgConfidence: {
-    label: 'Avg confidence',
-    color: 'var(--chart-1)',
-  },
-  minConfidence: {
-    label: 'Min confidence',
-    color: 'var(--chart-4)',
-  },
-}
-
-const NEUROMOD_CHART_CONFIG = {
-  dopamine: { label: 'DA', color: 'hsl(45, 93%, 47%)' },
-  serotonin: { label: '5-HT', color: 'hsl(200, 70%, 50%)' },
-  acetylcholine: { label: 'ACh', color: 'hsl(130, 60%, 45%)' },
-  norepinephrine: { label: 'NE', color: 'hsl(0, 70%, 55%)' },
-}
-
-const LOSS_CHART_CONFIG = {
-  recon_error: {
-    label: 'Recon Error',
-    color: 'var(--chart-3)',
-  },
-  drift: {
-    label: 'Drift',
-    color: 'var(--chart-5)',
-  },
-}
-
 const DIGIT_COLORS = [
   'hsl(0, 70%, 55%)',    // zero
   'hsl(36, 80%, 50%)',   // one
@@ -109,24 +63,14 @@ function GroundingBar({ grounding }) {
     fill: DIGIT_COLORS[i % DIGIT_COLORS.length],
   }))
 
-  const barConfig = Object.fromEntries(
-    words.map((w, i) => [w, { label: w, color: DIGIT_COLORS[i % DIGIT_COLORS.length] }])
-  )
-
   return (
-    <ChartContainer config={barConfig} className={CHART_CLASS}>
-      <BarChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-        <XAxis dataKey="word" tick={{ fontSize: 11 }} />
-        <YAxis domain={[0, 1]} tickFormatter={formatPercent} width={40} />
-        <ChartTooltip content={<ChartTooltipContent />} />
-        <Bar dataKey="confidence" radius={[4, 4, 0, 0]}>
-          {data.map((entry) => (
-            <rect key={entry.word} fill={entry.fill} />
-          ))}
-        </Bar>
-      </BarChart>
-    </ChartContainer>
+    <LightweightBarChart
+      className={CHART_CLASS}
+      data={data}
+      formatter={(value) => formatPercent(value, 0)}
+      labelKey="word"
+      valueKey="confidence"
+    />
   )
 }
 
@@ -134,43 +78,18 @@ function NeuromodTimeline({ data }) {
   const windowData = buildWindow(data)
 
   return (
-    <ChartContainer config={NEUROMOD_CHART_CONFIG} className={CHART_CLASS}>
-      <LineChart data={windowData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-        <XAxis dataKey="slot" ticks={LIVE_WINDOW_TICKS} tick={{ fontSize: 10 }} />
-        <YAxis domain={fixedUnitDomain} tickFormatter={formatFloat} width={36} />
-        <ChartTooltip content={<ChartTooltipContent />} />
-        <ChartLegend content={<ChartLegendContent />} />
-        <Line
-          dataKey="dopamine"
-          stroke="hsl(45, 93%, 47%)"
-          dot={false}
-          strokeWidth={1.5}
-          isAnimationActive={false}
-        />
-        <Line
-          dataKey="serotonin"
-          stroke="hsl(200, 70%, 50%)"
-          dot={false}
-          strokeWidth={1.5}
-          isAnimationActive={false}
-        />
-        <Line
-          dataKey="acetylcholine"
-          stroke="hsl(130, 60%, 45%)"
-          dot={false}
-          strokeWidth={1.5}
-          isAnimationActive={false}
-        />
-        <Line
-          dataKey="norepinephrine"
-          stroke="hsl(0, 70%, 55%)"
-          dot={false}
-          strokeWidth={1.5}
-          isAnimationActive={false}
-        />
-      </LineChart>
-    </ChartContainer>
+    <LightweightTimelineChart
+      className={CHART_CLASS}
+      data={windowData}
+      domain={[0, 1]}
+      formatter={(value) => formatFloat(value, 2)}
+      series={[
+        { key: 'dopamine', label: 'DA', color: 'hsl(45, 93%, 47%)' },
+        { key: 'serotonin', label: '5-HT', color: 'hsl(200, 70%, 50%)' },
+        { key: 'acetylcholine', label: 'ACh', color: 'hsl(130, 60%, 45%)' },
+        { key: 'norepinephrine', label: 'NE', color: 'hsl(0, 70%, 55%)' },
+      ]}
+    />
   )
 }
 
@@ -178,33 +97,17 @@ function LossTimeline({ data }) {
   const windowData = buildWindow(data)
 
   return (
-    <ChartContainer config={LOSS_CHART_CONFIG} className={CHART_CLASS}>
-      <AreaChart data={windowData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-        <XAxis dataKey="slot" ticks={LIVE_WINDOW_TICKS} tick={{ fontSize: 10 }} />
-        <YAxis tickFormatter={formatFloat} width={36} />
-        <ChartTooltip content={<ChartTooltipContent />} />
-        <ChartLegend content={<ChartLegendContent />} />
-        <Area
-          dataKey="recon_error"
-          stroke="var(--chart-3)"
-          fill="var(--chart-3)"
-          fillOpacity={0.15}
-          dot={false}
-          strokeWidth={1.5}
-          isAnimationActive={false}
-        />
-        <Area
-          dataKey="drift"
-          stroke="var(--chart-5)"
-          fill="var(--chart-5)"
-          fillOpacity={0.1}
-          dot={false}
-          strokeWidth={1.5}
-          isAnimationActive={false}
-        />
-      </AreaChart>
-    </ChartContainer>
+    <LightweightTimelineChart
+      areaKey="recon_error"
+      className={CHART_CLASS}
+      data={windowData}
+      domain={[0, Math.max(1, ...windowData.flatMap((item) => [Number(item.recon_error) || 0, Number(item.drift) || 0]))]}
+      formatter={(value) => formatFloat(value, 3)}
+      series={[
+        { key: 'recon_error', label: 'Recon error', color: 'var(--chart-3)' },
+        { key: 'drift', label: 'Drift', color: 'var(--chart-5)' },
+      ]}
+    />
   )
 }
 
@@ -212,34 +115,17 @@ function GroundingTimeline({ data }) {
   const windowData = buildWindow(data)
 
   return (
-    <ChartContainer config={GROUNDING_CHART_CONFIG} className={CHART_CLASS}>
-      <AreaChart data={windowData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-        <XAxis dataKey="slot" ticks={LIVE_WINDOW_TICKS} tick={{ fontSize: 10 }} />
-        <YAxis domain={[0, 1]} tickFormatter={formatPercent} width={40} />
-        <ChartTooltip content={<ChartTooltipContent />} />
-        <ChartLegend content={<ChartLegendContent />} />
-        <Area
-          dataKey="avgConfidence"
-          stroke="var(--chart-1)"
-          fill="var(--chart-1)"
-          fillOpacity={0.2}
-          dot={false}
-          strokeWidth={2}
-          isAnimationActive={false}
-        />
-        <Area
-          dataKey="minConfidence"
-          stroke="var(--chart-4)"
-          fill="var(--chart-4)"
-          fillOpacity={0.1}
-          dot={false}
-          strokeWidth={1}
-          strokeDasharray="4 2"
-          isAnimationActive={false}
-        />
-      </AreaChart>
-    </ChartContainer>
+    <LightweightTimelineChart
+      areaKey="avgConfidence"
+      className={CHART_CLASS}
+      data={windowData}
+      domain={[0, 1]}
+      formatter={(value) => formatPercent(value, 0)}
+      series={[
+        { key: 'avgConfidence', label: 'Avg confidence', color: 'var(--chart-1)' },
+        { key: 'minConfidence', label: 'Min confidence', color: 'var(--chart-4)' },
+      ]}
+    />
   )
 }
 

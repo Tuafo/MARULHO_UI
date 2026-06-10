@@ -6,7 +6,7 @@ const MAX_HISTORY = 120
 export const useTelemetryStore = create(
   subscribeWithSelector((set, get) => ({
     // Connection
-    apiBase: import.meta.env.VITE_HECSN_API_BASE
+    apiBase: import.meta.env.VITE_MARULHO_API_BASE
       || (window.location.port === '8000' ? window.location.origin : 'http://127.0.0.1:8000'),
     streamConnected: false,
     error: '',

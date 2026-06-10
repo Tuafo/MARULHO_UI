@@ -3,7 +3,7 @@ const COMPACT_NUMBER_FORMATTER = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 1,
 })
 
-export const DEFAULT_API_BASE = import.meta.env.VITE_HECSN_API_BASE
+export const DEFAULT_API_BASE = import.meta.env.VITE_MARULHO_API_BASE
   || (window.location.port === '8000' ? window.location.origin : 'http://127.0.0.1:8000')
 
 export function normalizeApiBase(value) {
@@ -89,16 +89,6 @@ export function toNumber(value, fallback = 0) {
   return Number.isFinite(numericValue) ? numericValue : fallback
 }
 
-export function nicePositiveDomain(values, minimumMax = 1) {
-  const numericValues = values.map((value) => toNumber(value, 0))
-  const maxValue = Math.max(minimumMax, ...numericValues)
-  return [0, roundUpNice(maxValue)]
-}
-
-export function fixedUnitDomain() {
-  return [0, 1]
-}
-
 export function bufferedDomain(values, fallback = [-1, 1], paddingRatio = 0.08) {
   const numericValues = values
     .map((value) => Number(value))
@@ -119,24 +109,3 @@ export function bufferedDomain(values, fallback = [-1, 1], paddingRatio = 0.08) 
   return [minValue - padding, maxValue + padding]
 }
 
-function roundUpNice(value) {
-  if (!Number.isFinite(value) || value <= 0) {
-    return 1
-  }
-
-  const exponent = Math.floor(Math.log10(value))
-  const scale = 10 ** exponent
-  const normalized = value / scale
-
-  if (normalized <= 1) {
-    return scale
-  }
-  if (normalized <= 2) {
-    return 2 * scale
-  }
-  if (normalized <= 5) {
-    return 5 * scale
-  }
-
-  return 10 * scale
-}

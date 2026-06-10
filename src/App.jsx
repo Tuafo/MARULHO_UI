@@ -117,10 +117,10 @@ const SECTIONS = [
   },
   {
     id: 'ask',
-    label: 'Workspace',
+    label: 'Interaction',
     icon: MessageSquareTextIcon,
     group: 'Control',
-    help: 'Inspect routing, evidence, and grounded answers.',
+    help: 'Ask grounded questions and inspect routing evidence.',
   },
   {
     id: 'grounding',
@@ -134,7 +134,7 @@ const SECTIONS = [
     label: 'Validation',
     icon: ShieldCheckIcon,
     group: 'Evidence',
-    help: 'Browse saved Phase 14/15 reports, safety gates, and operator-visible evidence.',
+    help: 'Browse Runtime Truth evidence, benchmark currency, and operator gates.',
   },
   {
     id: 'runtime',
@@ -175,7 +175,7 @@ const SECTION_TITLES = {
   animation: 'Neural Dynamics',
   neuralspace: 'Neural Space',
   training: 'Learning Monitor',
-  ask: 'Workspace',
+  ask: 'Grounded Interaction',
   grounding: 'Grounding Probe',
   validation: 'Validation Evidence',
   runtime: 'Systems & Runtime',
@@ -633,7 +633,7 @@ function App() {
       .map((entry, index) => normalizeDraftSource(entry, `candidate_source_${index + 1}`))
       .filter(Boolean)
 
-    setPendingAction('Configuring the Terminus brain')
+    setPendingAction('Configuring the Subcortex runtime')
     setError('')
 
     try {
@@ -667,7 +667,7 @@ function App() {
   }
 
   async function startBrain() {
-    setPendingAction('Starting the Terminus brain')
+    setPendingAction('Starting the Subcortex runtime')
     setError('')
 
     try {
@@ -681,7 +681,7 @@ function App() {
   }
 
   async function stopBrain() {
-    setPendingAction('Stopping the Terminus brain')
+    setPendingAction('Stopping the Subcortex runtime')
     setError('')
 
     try {
@@ -695,7 +695,7 @@ function App() {
   }
 
   async function tickBrain() {
-    setPendingAction('Advancing the Terminus brain')
+    setPendingAction('Advancing the Subcortex runtime')
     setError('')
 
     try {
@@ -1019,9 +1019,9 @@ function App() {
                 <BrainIcon className="size-4" />
               </div>
               <div className="min-w-0">
-                <div className="font-semibold tracking-tight">Terminus</div>
+                <div className="font-semibold tracking-tight">MARULHO</div>
                 <div className="truncate text-[10px] leading-4 text-sidebar-foreground/60">
-                  Cognitive Runtime
+                  Subcortex Runtime
                 </div>
               </div>
               {/* Heartbeat dot */}
@@ -1078,7 +1078,7 @@ function App() {
                   } />
                   <QuickStatRow label="Tokens" value={status?.token_count?.toLocaleString() || '—'} />
                   <QuickStatRow label="Checkpoint" value={checkpointName} truncate />
-                  <QuickStatRow label="Brain" value={
+                  <QuickStatRow label="Runtime" value={
                     brainRuntime?.running ? '● running' : brainRuntime?.configured ? '○ idle' : '— unconfigured'
                   } />
                   <QuickStatRow label="Last trace" value={formatWhen(status?.last_trace_created_at)} />

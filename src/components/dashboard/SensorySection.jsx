@@ -405,7 +405,7 @@ export default function SensorySection({ apiBase, brainRuntime }) {
         />
         <EmptyState
           title="Sensory routing not active"
-          description="Enable the live Terminus sensory pipeline to view real image and audio episodes from Hugging Face."
+          description="Enable the live Subcortex sensory pipeline to view real image and audio episodes from Hugging Face."
         />
       </section>
     )
@@ -424,7 +424,7 @@ export default function SensorySection({ apiBase, brainRuntime }) {
           <CardHeader className="border-b">
             <CardTitle className="flex items-center gap-2">
               <RouteIcon className="size-4" /> Sensory routing
-              <HelpTip>Terminus first decides which sensory source family should get attention next, then it streams a real sample from that chosen source.</HelpTip>
+              <HelpTip>The runtime first decides which sensory source family should get attention next, then it streams a real sample from that chosen source.</HelpTip>
             </CardTitle>
             <CardDescription>Current live routing state</CardDescription>
           </CardHeader>
@@ -484,12 +484,12 @@ export default function SensorySection({ apiBase, brainRuntime }) {
           <CardTitle className="flex items-center gap-2">
             <LayersIcon className="size-4" /> How the sensory feed works
           </CardTitle>
-          <CardDescription>Simple operator view of what Terminus is doing with images and audio.</CardDescription>
+          <CardDescription>Simple operator view of how the runtime routes images and audio.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 lg:grid-cols-4">
           <div className="rounded-xl border bg-background/60 p-4">
             <p className="text-xs uppercase tracking-wider text-muted-foreground">1. Focus</p>
-            <p className="mt-2 text-sm text-muted-foreground">The live mind produces focus terms from its current curiosity, question, or exploration target.</p>
+            <p className="mt-2 text-sm text-muted-foreground">The runtime produces focus terms from its current question, replay pressure, or exploration target.</p>
           </div>
           <div className="rounded-xl border bg-background/60 p-4">
             <p className="text-xs uppercase tracking-wider text-muted-foreground">2. Route</p>
@@ -497,7 +497,7 @@ export default function SensorySection({ apiBase, brainRuntime }) {
           </div>
           <div className="rounded-xl border bg-background/60 p-4">
             <p className="text-xs uppercase tracking-wider text-muted-foreground">3. Shortlist</p>
-            <p className="mt-2 text-sm text-muted-foreground">After the source is chosen, Terminus looks ahead across a small shortlist of real items from that dataset and keeps the best-matching sample.</p>
+            <p className="mt-2 text-sm text-muted-foreground">After the source is chosen, the runtime looks ahead across a small shortlist of real items from that dataset and keeps the best-matching sample.</p>
           </div>
           <div className="rounded-xl border bg-background/60 p-4">
             <p className="text-xs uppercase tracking-wider text-muted-foreground">4. Bind</p>
@@ -572,7 +572,7 @@ export default function SensorySection({ apiBase, brainRuntime }) {
       ) : (
         <EmptyState
           title="No sensory previews yet"
-          description="Run the brain long enough for a real sensory episode to be selected. Recent image and audio previews will appear here automatically."
+          description="Run the Subcortex runtime long enough for a real sensory episode to be selected. Recent image and audio previews will appear here automatically."
         />
       )}
     </section>

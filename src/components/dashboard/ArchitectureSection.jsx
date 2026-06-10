@@ -142,7 +142,7 @@ export default function ArchitectureSection({ apiBase }) {
     <section className="space-y-4">
       <SectionHeading
         title="Model"
-        description="Current Terminus topology: GPCSN column field, predictive/context dynamics, real cross-modal grounding, dual memory, and active exploration."
+        description="Current MARULHO topology: GPCSN column field, predictive/context dynamics, real cross-modal grounding, dual memory, and active exploration."
         badge={<Badge variant="outline">{architecture?.family || 'hybrid runtime'}</Badge>}
       />
 
@@ -167,7 +167,7 @@ export default function ArchitectureSection({ apiBase }) {
               description="Sparse competitive representation and predictive structure."
               value={formatParamValue(coreLayer?.params?.n_columns)}
               badge={<Badge variant="secondary">columns</Badge>}
-              help="This is the live sparse column field at the center of Terminus. It is the main representational substrate of the system."
+              help="This is the live sparse column field at the center of MARULHO. It is the main representational substrate of the system."
             />
             <SummaryCard
               icon={RouteIcon}
@@ -195,7 +195,7 @@ export default function ArchitectureSection({ apiBase }) {
                     <Badge variant="outline">{architecture.core_name}</Badge>
                   </CardTitle>
                   <CardDescription>
-                    Public-facing view of the current Terminus stack.
+                    Operator-facing view of the current Subcortex stack.
                   </CardDescription>
                 </div>
                 <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => fetchArchitecture()} disabled={loading}>
@@ -234,7 +234,7 @@ export default function ArchitectureSection({ apiBase }) {
                 />
               </div>
               <p className="text-sm text-muted-foreground">
-                Terminus is a live system: GPCSN provides grounded sparse structure, while active exploration, replay, and policy evidence carry the runtime cognition path.
+                MARULHO is a live runtime: GPCSN provides grounded sparse structure, while active exploration, replay, and policy evidence carry the cognition path.
               </p>
             </CardContent>
           </Card>
@@ -262,7 +262,7 @@ export default function ArchitectureSection({ apiBase }) {
                   <DatabaseIcon className="size-4" /> Runtime summary
                 </CardTitle>
                 <CardDescription>
-                  Operator-friendly readout of what is active in the current public Terminus stack.
+                  Operator-friendly readout of what is active in the current MARULHO stack.
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-3 pt-4 sm:grid-cols-2">

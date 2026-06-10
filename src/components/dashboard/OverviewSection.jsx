@@ -14,15 +14,6 @@ import {
   SquareIcon,
   ZapIcon,
 } from 'lucide-react'
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  Line,
-  LineChart,
-  XAxis,
-  YAxis,
-} from 'recharts'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -35,61 +26,14 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import {
-  ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
-  ChartTooltip,
-  ChartTooltipContent,
-} from '@/components/ui/chart'
-import {
-  fixedUnitDomain,
   formatCompactNumber,
   formatFloat,
   formatPercent,
-  nicePositiveDomain,
 } from '@/lib/dashboard-utils'
-import { EmptyState, HelpTip, MetricCard, SectionHeading } from '@/components/dashboard/shared'
+import { EmptyState, HelpTip, LightweightTimelineChart, MetricCard, SectionHeading } from '@/components/dashboard/shared'
 
 const CHART_CLASS = 'h-[240px] w-full aspect-auto'
 const LIVE_SAMPLE_WINDOW = 80
-const LIVE_WINDOW_TICKS = [1, 20, 40, 60, 80]
-
-const TOKEN_CHART_CONFIG = {
-  tokens: {
-    label: 'Tokens',
-    color: 'var(--chart-1)',
-  },
-}
-
-const STATE_CHART_CONFIG = {
-  memoryFill: {
-    label: 'Memory fill',
-    color: 'var(--chart-2)',
-  },
-  driftFloor: {
-    label: 'Drift floor',
-    color: 'var(--chart-4)',
-  },
-}
-
-const REGULATOR_CHART_CONFIG = {
-  dopamine: {
-    label: 'Dopamine',
-    color: 'var(--chart-1)',
-  },
-  serotonin: {
-    label: 'Serotonin',
-    color: 'var(--chart-2)',
-  },
-  acetylcholine: {
-    label: 'Acetylcholine',
-    color: 'var(--chart-3)',
-  },
-  norepinephrine: {
-    label: 'Norepinephrine',
-    color: 'var(--chart-5)',
-  },
-}
 
 function buildTelemetryWindow(telemetryData) {
   return Array.from({ length: LIVE_SAMPLE_WINDOW }, (_, index) => ({
@@ -113,8 +57,8 @@ export default function OverviewSection({
   telemetryData,
   tickBrain,
 }) {
-  const tokenDomain = nicePositiveDomain(telemetryData.map((item) => item.tokens), 1000)
   const windowedTelemetryData = buildTelemetryWindow(telemetryData)
+  const tokenMax = Math.max(1000, ...windowedTelemetryData.map((item) => Number(item.tokens || 0)))
   const animation = status?.animation || {}
   const crossModal = animation.cross_modal
   const contextTau = animation.context_tau
@@ -130,8 +74,8 @@ export default function OverviewSection({
   return (
     <section id="overview" className="space-y-4">
       <SectionHeading
-        title="Startup Dashboard"
-        description="Live service state, runtime controls, validation evidence, and the main operator paths in one place."
+        title="Runtime Overview"
+        description="Live Subcortex state, runtime controls, validation evidence, and the main operator paths in one place."
         badge={<Badge variant="outline">rev {status?.state_revision ?? 'n/a'}</Badge>}
       />
 
@@ -144,7 +88,7 @@ export default function OverviewSection({
               </div>
               <div className="space-y-1">
                 <CardTitle>Service & Runtime</CardTitle>
-                <CardDescription>Backend stream, checkpoint attachment, and Terminus loop state.</CardDescription>
+                <CardDescription>Backend stream, checkpoint attachment, and Subcortex loop state.</CardDescription>
               </div>
             </div>
             <CardAction>
@@ -209,9 +153,9 @@ export default function OverviewSection({
           <CardContent className="grid gap-2 sm:grid-cols-2">
             <Button type="button" variant="outline" className="h-auto justify-start gap-3 p-3" onClick={() => selectSection('ask')}>
               <MessageSquareTextIcon className="size-4 text-primary" />
-              <span className="text-left">
-                <span className="block text-sm font-medium">Workspace</span>
-                <span className="block text-xs text-muted-foreground">Ask, inspect, learn</span>
+                <span className="text-left">
+                <span className="block text-sm font-medium">Interaction</span>
+                <span className="block text-xs text-muted-foreground">Grounded query and evidence</span>
               </span>
             </Button>
             <Button type="button" variant="outline" className="h-auto justify-start gap-3 p-3" onClick={() => selectSection('validation')}>
@@ -282,18 +226,18 @@ export default function OverviewSection({
         />
         <MetricCard
           icon={BrainIcon}
-          title="Living brain"
+          title="Runtime liveness"
           value={brain?.running ? 'Active' : 'Idle'}
           description={`${brain?.multimodal?.cross_modal_visual_accepted ?? 0}V/${brain?.multimodal?.cross_modal_audio_accepted ?? 0}A bound · ${brain?.multimodal?.recent_preview_count ?? 0} previews`}
           badge={brain?.multimodal?.enabled
             ? <Badge variant="secondary">sensory active</Badge>
             : <Badge variant="outline">text only</Badge>
           }
-          help="The active Terminus brain: SNN training, real sensory grounding, replay, policy pressure, and runtime-truth evidence."
+          help="The active MARULHO Subcortex runtime: SNN dynamics, real sensory grounding, replay pressure, policy pressure, and Runtime Truth evidence."
         />
       </div>
 
-      {/* V4 feature indicators */}
+      {/* Runtime capability indicators */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card size="sm" className="bg-card/90">
           <CardHeader className="border-b">
@@ -379,7 +323,7 @@ export default function OverviewSection({
               </div>
             </div>
             <CardAction>
-              <HelpTip>Shows which plasticity pathway is active. local_stdp with triplet traces and tag/PRP consolidation is the v4 target.</HelpTip>
+              <HelpTip>Shows which plasticity pathway is active. local_stdp with triplet traces and tag/PRP consolidation is the current Subcortex target.</HelpTip>
             </CardAction>
           </CardHeader>
           <CardContent>
@@ -412,37 +356,14 @@ export default function OverviewSection({
           </CardHeader>
           <CardContent>
             {telemetryData.length ? (
-              <ChartContainer config={TOKEN_CHART_CONFIG} className={CHART_CLASS}>
-                <AreaChart data={windowedTelemetryData} margin={{ left: 4, right: 12, top: 8, bottom: 0 }}>
-                  <CartesianGrid vertical={false} />
-                  <XAxis
-                    type="number"
-                    dataKey="slot"
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                    domain={[1, LIVE_SAMPLE_WINDOW]}
-                    ticks={LIVE_WINDOW_TICKS}
-                  />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    width={64}
-                    domain={tokenDomain}
-                    tickFormatter={formatCompactNumber}
-                  />
-                  <ChartTooltip content={<ChartTooltipContent labelFormatter={(value) => `Sample ${value}`} />} />
-                  <Area
-                    type="linear"
-                    dataKey="tokens"
-                    stroke="var(--color-tokens)"
-                    fill="var(--color-tokens)"
-                    fillOpacity={0.18}
-                    strokeWidth={2}
-                    isAnimationActive={false}
-                  />
-                </AreaChart>
-              </ChartContainer>
+              <LightweightTimelineChart
+                areaKey="tokens"
+                className={CHART_CLASS}
+                data={windowedTelemetryData}
+                domain={[0, tokenMax]}
+                formatter={formatCompactNumber}
+                series={[{ key: 'tokens', label: 'Tokens', color: 'var(--chart-1)' }]}
+              />
             ) : (
               <EmptyState title="Waiting for telemetry" description="The token chart will appear after the service pushes a status sample." />
             )}
@@ -459,25 +380,16 @@ export default function OverviewSection({
           </CardHeader>
           <CardContent>
             {telemetryData.length ? (
-              <ChartContainer config={STATE_CHART_CONFIG} className={CHART_CLASS}>
-                <LineChart data={windowedTelemetryData} margin={{ left: 4, right: 12, top: 8, bottom: 0 }}>
-                  <CartesianGrid vertical={false} />
-                  <XAxis
-                    type="number"
-                    dataKey="slot"
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                    domain={[1, LIVE_SAMPLE_WINDOW]}
-                    ticks={LIVE_WINDOW_TICKS}
-                  />
-                  <YAxis tickLine={false} axisLine={false} width={64} domain={fixedUnitDomain()} tickFormatter={(value) => `${Math.round(value * 100)}%`} />
-                  <ChartTooltip content={<ChartTooltipContent labelFormatter={(value) => `Sample ${value}`} />} />
-                  <ChartLegend content={<ChartLegendContent />} />
-                  <Line type="linear" dataKey="memoryFill" stroke="var(--color-memoryFill)" strokeWidth={2} dot={false} isAnimationActive={false} />
-                  <Line type="linear" dataKey="driftFloor" stroke="var(--color-driftFloor)" strokeWidth={2} dot={false} isAnimationActive={false} />
-                </LineChart>
-              </ChartContainer>
+              <LightweightTimelineChart
+                className={CHART_CLASS}
+                data={windowedTelemetryData}
+                domain={[0, 1]}
+                formatter={formatPercent}
+                series={[
+                  { key: 'memoryFill', label: 'Memory fill', color: 'var(--chart-2)' },
+                  { key: 'driftFloor', label: 'Drift floor', color: 'var(--chart-4)' },
+                ]}
+              />
             ) : (
               <EmptyState title="Waiting for telemetry" description="Memory fill and drift appear once the live status stream starts updating." />
             )}
@@ -494,27 +406,18 @@ export default function OverviewSection({
           </CardHeader>
           <CardContent>
             {telemetryData.length ? (
-              <ChartContainer config={REGULATOR_CHART_CONFIG} className={CHART_CLASS}>
-                <LineChart data={windowedTelemetryData} margin={{ left: 4, right: 12, top: 8, bottom: 0 }}>
-                  <CartesianGrid vertical={false} />
-                  <XAxis
-                    type="number"
-                    dataKey="slot"
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                    domain={[1, LIVE_SAMPLE_WINDOW]}
-                    ticks={LIVE_WINDOW_TICKS}
-                  />
-                  <YAxis tickLine={false} axisLine={false} width={64} domain={fixedUnitDomain()} tickFormatter={(value) => `${Math.round(value * 100)}%`} />
-                  <ChartTooltip content={<ChartTooltipContent labelFormatter={(value) => `Sample ${value}`} />} />
-                  <ChartLegend content={<ChartLegendContent />} />
-                  <Line type="linear" dataKey="dopamine" stroke="var(--color-dopamine)" strokeWidth={2} dot={false} isAnimationActive={false} />
-                  <Line type="linear" dataKey="serotonin" stroke="var(--color-serotonin)" strokeWidth={2} dot={false} isAnimationActive={false} />
-                  <Line type="linear" dataKey="acetylcholine" stroke="var(--color-acetylcholine)" strokeWidth={2} dot={false} isAnimationActive={false} />
-                  <Line type="linear" dataKey="norepinephrine" stroke="var(--color-norepinephrine)" strokeWidth={2} dot={false} isAnimationActive={false} />
-                </LineChart>
-              </ChartContainer>
+              <LightweightTimelineChart
+                className={CHART_CLASS}
+                data={windowedTelemetryData}
+                domain={[0, 1]}
+                formatter={formatPercent}
+                series={[
+                  { key: 'dopamine', label: 'Dopamine', color: 'var(--chart-1)' },
+                  { key: 'serotonin', label: 'Serotonin', color: 'var(--chart-2)' },
+                  { key: 'acetylcholine', label: 'Acetylcholine', color: 'var(--chart-3)' },
+                  { key: 'norepinephrine', label: 'Norepinephrine', color: 'var(--chart-5)' },
+                ]}
+              />
             ) : (
               <EmptyState title="Waiting for telemetry" description="These regulator traces show up once the backend starts streaming live snapshots." />
             )}
