@@ -1,41 +1,47 @@
-import { lazy, Suspense, startTransition, useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ActivityIcon,
-  AlertCircleIcon,
   ArchiveIcon,
-  AudioLinesIcon,
-  BarChart3Icon,
-  BrainIcon,
-  BoxIcon,
+  BrainCircuitIcon,
+  CheckCircle2Icon,
+  CircleGaugeIcon,
   CpuIcon,
+  DatabaseIcon,
   FlaskConicalIcon,
-  GraduationCapIcon,
-  HistoryIcon,
-  LayersIcon,
+  GaugeIcon,
+  Layers3Icon,
   LoaderCircleIcon,
   MessageSquareTextIcon,
+  NetworkIcon,
   PlayIcon,
-  RotateCwIcon,
-  SettingsIcon,
+  RefreshCwIcon,
+  SaveIcon,
+  ServerIcon,
   ShieldCheckIcon,
   SquareIcon,
-  TrendingUpIcon,
+  TriangleAlertIcon,
   WifiIcon,
   WifiOffIcon,
 } from 'lucide-react'
 
-import { HelpTip, SectionFallback } from '@/components/dashboard/shared'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Separator } from '@/components/ui/separator'
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
@@ -44,1246 +50,911 @@ import {
   SidebarMenuItem,
   SidebarProvider,
   SidebarRail,
-  SidebarSeparator,
   SidebarTrigger,
 } from '@/components/ui/sidebar'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { Textarea } from '@/components/ui/textarea'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import MachineryWorkspace from '@/components/MachineryWorkspace'
 import {
   DEFAULT_API_BASE,
   fileName,
+  formatCompactNumber,
+  formatFloat,
   formatMode,
+  formatPercent,
   formatWhen,
   normalizeApiBase,
 } from '@/lib/dashboard-utils'
 import { requestJson } from '@/lib/service-api'
-import { useTelemetryStore } from '@/stores/telemetryStore'
 
-const OverviewSection = lazy(() => import('@/components/dashboard/OverviewSection'))
-const AskSection = lazy(() => import('@/components/dashboard/AskSection'))
-const RuntimeSection = lazy(() => import('@/components/dashboard/RuntimeSection'))
-const CheckpointsSection = lazy(() => import('@/components/dashboard/CheckpointsSection'))
-const TracesSection = lazy(() => import('@/components/dashboard/TracesSection'))
-const ArchitectureSection = lazy(() => import('@/components/dashboard/ArchitectureSection'))
-const AnimationSection = lazy(() => import('@/components/dashboard/AnimationSection'))
-const NeuralSpaceSection = lazy(() => import('@/components/dashboard/NeuralSpace3D'))
-const GroundingProbeSection = lazy(() => import('@/components/dashboard/GroundingProbeSection'))
-const DevelopmentalSection = lazy(() => import('@/components/dashboard/DevelopmentalSection'))
-const TrainingSection = lazy(() => import('@/components/dashboard/TrainingSection'))
-const SensorySection = lazy(() => import('@/components/dashboard/SensorySection'))
-const ValidationSection = lazy(() => import('@/components/dashboard/ValidationSection'))
-
-const SECTIONS = [
-  {
-    id: 'overview',
-    label: 'Overview',
-    icon: BarChart3Icon,
-    group: 'Monitor',
-    help: 'Live summary cards and stable telemetry charts.',
-  },
-  {
-    id: 'sensory',
-    label: 'Sensory',
-    icon: AudioLinesIcon,
-    group: 'Monitor',
-    help: 'Real image/audio grounding from Hugging Face with semantic routing and live previews.',
-  },
-  {
-    id: 'architecture',
-    label: 'Model',
-    icon: LayersIcon,
-    group: 'Model',
-    help: 'SVG diagram of the active model layers and their configuration.',
-  },
-  {
-    id: 'animation',
-    label: 'Dynamics',
-    icon: ActivityIcon,
-    group: 'Monitor',
-    help: 'Live spike flow, column activations, neuromodulators, and memory state.',
-  },
-  {
-    id: 'neuralspace',
-    label: 'Neural Space',
-    icon: BoxIcon,
-    group: 'Monitor',
-    help: '3D WebGL visualization of the neural network — columns, spikes, and cross-modal beams in real time.',
-  },
-  {
-    id: 'training',
-    label: 'Learning',
-    icon: TrendingUpIcon,
-    group: 'Evidence',
-    help: 'Live learning metrics: grounding confidence, reconstruction error, and neuromodulator dynamics.',
-  },
-  {
-    id: 'ask',
-    label: 'Interaction',
-    icon: MessageSquareTextIcon,
-    group: 'Control',
-    help: 'Ask grounded questions and inspect routing evidence.',
-  },
-  {
-    id: 'grounding',
-    label: 'Grounding',
-    icon: FlaskConicalIcon,
-    group: 'Evidence',
-    help: 'Run the 50-triple grounding probe and view concrete vs abstract accuracy.',
-  },
-  {
-    id: 'validation',
-    label: 'Validation',
-    icon: ShieldCheckIcon,
-    group: 'Evidence',
-    help: 'Browse Runtime Truth evidence, benchmark currency, and operator gates.',
-  },
-  {
-    id: 'runtime',
-    label: 'Systems',
-    icon: CpuIcon,
-    group: 'Control',
-    help: 'Model, memory, routing, and runtime internals for the active checkpoint.',
-  },
-  {
-    id: 'developmental',
-    label: 'Growth',
-    icon: GraduationCapIcon,
-    group: 'Model',
-    help: 'Stage progress, plasticity mode, and maturity indicators.',
-  },
-  {
-    id: 'checkpoints',
-    label: 'Checkpoints',
-    icon: ArchiveIcon,
-    group: 'Control',
-    help: 'Save the current runtime or restore a stored snapshot.',
-  },
-  {
-    id: 'traces',
-    label: 'Traces',
-    icon: HistoryIcon,
-    group: 'Evidence',
-    help: 'Open stored traces and review prior requests, evidence, and routes.',
-  },
+const WORKSPACES = [
+  { id: 'runtime', label: 'Runtime', icon: ActivityIcon },
+  { id: 'machinery', label: 'Machinery', icon: NetworkIcon },
+  { id: 'columns', label: 'Columns', icon: Layers3Icon },
+  { id: 'sources', label: 'Sources', icon: DatabaseIcon },
+  { id: 'interaction', label: 'Interaction', icon: MessageSquareTextIcon },
+  { id: 'evidence', label: 'Evidence', icon: ShieldCheckIcon },
 ]
-
-const SECTION_GROUPS = ['Monitor', 'Control', 'Evidence', 'Model']
-
-const SECTION_TITLES = {
-  overview: 'Overview',
-  sensory: 'Sensory Feed',
-  architecture: 'Model Architecture',
-  animation: 'Neural Dynamics',
-  neuralspace: 'Neural Space',
-  training: 'Learning Monitor',
-  ask: 'Grounded Interaction',
-  grounding: 'Grounding Probe',
-  validation: 'Validation Evidence',
-  runtime: 'Systems & Runtime',
-  developmental: 'Growth Stages',
-  checkpoints: 'Checkpoints',
-  traces: 'Traces',
-}
-
-let sourceDraftCounter = 0
-
-function nextSourceDraftId() {
-  sourceDraftCounter += 1
-  return `source-draft-${sourceDraftCounter}`
-}
-
-function createEmptySourceDraft() {
-  return {
-    draftId: nextSourceDraftId(),
-    name: '',
-    source: '',
-    sourceType: 'auto',
-    textField: 'text',
-    hfConfig: '',
-  }
-}
-
-function normalizeCurriculumConfig(runtime) {
-  if (!runtime?.curriculum?.enabled) return null
-  return {
-    enabled: true,
-    topics_per_cycle: runtime.curriculum.topics_per_cycle ?? 3,
-    trigger_interval_tokens: runtime.curriculum.trigger_interval_tokens ?? 1024,
-    cooldown_seconds: runtime.curriculum.cooldown_seconds ?? 30,
-  }
-}
-
-function normalizeSensoryConfig(runtime) {
-  if (!runtime?.sensory?.enabled) return null
-  return {
-    enabled: true,
-    source_bank: Array.isArray(runtime.sensory.source_bank) ? runtime.sensory.source_bank : [],
-    episode_interval_tokens: runtime.sensory.episode_interval_tokens ?? 1536,
-    items_per_episode: runtime.sensory.items_per_episode ?? 2,
-    base_windows_per_item: runtime.sensory.base_windows_per_item ?? 4,
-    max_windows_per_item: runtime.sensory.max_windows_per_item ?? 10,
-    confidence_window_gain: runtime.sensory.confidence_window_gain ?? 3,
-    semantic_window_gain: runtime.sensory.semantic_window_gain ?? 3,
-    item_retrieval_lookahead: runtime.sensory.item_retrieval_lookahead ?? 6,
-    item_retrieval_semantic_weight: runtime.sensory.item_retrieval_semantic_weight ?? 0.72,
-    modality_target_confidence: runtime.sensory.modality_target_confidence ?? 0.7,
-    observation_salience: runtime.sensory.observation_salience ?? 0.82,
-    cooldown_seconds: runtime.sensory.cooldown_seconds ?? 8,
-    repeat_sources: runtime.sensory.repeat_sources ?? true,
-  }
-}
-
-function createEmptyBrainConfigDraft() {
-  return {
-    sourceBank: [createEmptySourceDraft()],
-    candidateBank: [createEmptySourceDraft()],
-    autonomyEnabled: false,
-    autonomyPolicy: 'active',
-    autonomyTriggerIntervalTokens: '4096',
-    tickTokens: '128',
-    sleepIntervalSeconds: '0.25',
-    tickSteps: '1',
-    repeatSources: true,
-    curriculumConfig: null,
-    sensoryConfig: null,
-  }
-}
-
-function createSourceDraftFromRuntime(spec) {
-  return {
-    draftId: nextSourceDraftId(),
-    name: spec?.name || '',
-    source: spec?.source || '',
-    sourceType: spec?.source_type || 'auto',
-    textField: spec?.text_field || 'text',
-    hfConfig: spec?.hf_config || '',
-  }
-}
-
-function createBrainConfigDraftFromRuntime(runtime) {
-  const configuredSourceBank = Array.isArray(runtime?.source_bank) ? runtime.source_bank : []
-  const configuredCandidateBank = Array.isArray(runtime?.autonomy?.candidate_bank)
-    ? runtime.autonomy.candidate_bank
-    : []
-
-  return {
-    sourceBank: configuredSourceBank.length
-      ? configuredSourceBank.map((item) => createSourceDraftFromRuntime(item))
-      : [createEmptySourceDraft()],
-    candidateBank: configuredCandidateBank.length
-      ? configuredCandidateBank.map((item) => createSourceDraftFromRuntime(item))
-      : [createEmptySourceDraft()],
-    autonomyEnabled: Boolean(runtime?.autonomy?.enabled && configuredCandidateBank.length),
-    autonomyPolicy: runtime?.autonomy?.policy || 'active',
-    autonomyTriggerIntervalTokens: String(runtime?.autonomy?.trigger_interval_tokens ?? 4096),
-    tickTokens: String(runtime?.tick_tokens ?? 128),
-    sleepIntervalSeconds: String(runtime?.sleep_interval_seconds ?? 0.25),
-    tickSteps: '1',
-    repeatSources: Boolean(runtime?.repeat_sources ?? true),
-    curriculumConfig: normalizeCurriculumConfig(runtime),
-    sensoryConfig: normalizeSensoryConfig(runtime),
-  }
-}
-
-function createBrainConfigRuntimeSignature(runtime) {
-  const configuredSourceBank = Array.isArray(runtime?.source_bank) ? runtime.source_bank : []
-  const configuredCandidateBank = Array.isArray(runtime?.autonomy?.candidate_bank)
-    ? runtime.autonomy.candidate_bank
-    : []
-
-  return JSON.stringify({
-    sourceBank: configuredSourceBank.map((item) => ({
-      name: item?.name || '',
-      source: item?.source || '',
-      sourceType: item?.source_type || 'auto',
-      textField: item?.text_field || 'text',
-      hfConfig: item?.hf_config || '',
-    })),
-    candidateBank: configuredCandidateBank.map((item) => ({
-      name: item?.name || '',
-      source: item?.source || '',
-      sourceType: item?.source_type || 'auto',
-      textField: item?.text_field || 'text',
-      hfConfig: item?.hf_config || '',
-    })),
-    autonomyEnabled: Boolean(runtime?.autonomy?.enabled && configuredCandidateBank.length),
-    autonomyPolicy: runtime?.autonomy?.policy || 'active',
-    autonomyTriggerIntervalTokens: String(runtime?.autonomy?.trigger_interval_tokens ?? 4096),
-    tickTokens: String(runtime?.tick_tokens ?? 128),
-    sleepIntervalSeconds: String(runtime?.sleep_interval_seconds ?? 0.25),
-    tickSteps: '1',
-    repeatSources: Boolean(runtime?.repeat_sources ?? true),
-    curriculumConfig: normalizeCurriculumConfig(runtime),
-    sensoryConfig: normalizeSensoryConfig(runtime),
-  })
-}
-
-function normalizeDraftSource(entry, fallbackName) {
-  const source = String(entry?.source || '').trim()
-  if (!source) {
-    return null
-  }
-
-  return {
-    name: String(entry?.name || '').trim() || fallbackName,
-    source,
-    source_type: entry?.sourceType || 'auto',
-    text_field: String(entry?.textField || '').trim() || 'text',
-    hf_config: String(entry?.hfConfig || '').trim() || null,
-  }
-}
-
-function parsePositiveInteger(value, fallback) {
-  const trimmed = String(value || '').trim()
-  if (!trimmed) {
-    return fallback
-  }
-
-  const numericValue = Number.parseInt(trimmed, 10)
-  return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : fallback
-}
-
-function parsePositiveFloat(value, fallback) {
-  const trimmed = String(value || '').trim()
-  if (!trimmed) {
-    return fallback
-  }
-
-  const numericValue = Number.parseFloat(trimmed)
-  return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : fallback
-}
 
 function App() {
   const [apiBase, setApiBase] = useState(DEFAULT_API_BASE)
-  const [apiBaseInput, setApiBaseInput] = useState(DEFAULT_API_BASE)
+  const [apiDraft, setApiDraft] = useState(DEFAULT_API_BASE)
+  const [workspace, setWorkspace] = useState('runtime')
   const [status, setStatus] = useState(null)
+  const [terminus, setTerminus] = useState(null)
   const [checkpoints, setCheckpoints] = useState([])
   const [traces, setTraces] = useState([])
-  const [selectedTraceId, setSelectedTraceId] = useState('')
-  const [conversation, setConversation] = useState([])
-  const [draft, setDraft] = useState('')
-  const [contextText, setContextText] = useState('')
-  const [autoLearn, setAutoLearn] = useState(true)
-  const [brainConfig, setBrainConfigState] = useState(createEmptyBrainConfigDraft)
-  const [brainConfigDirty, setBrainConfigDirty] = useState(false)
-  const [pendingAction, setPendingAction] = useState('')
-  const [error, setError] = useState('')
-  const [previewQuery, setPreviewQuery] = useState(null)
-  const [previewResponse, setPreviewResponse] = useState(null)
   const [selectedCheckpoint, setSelectedCheckpoint] = useState('')
-  const [telemetryHistory, setTelemetryHistory] = useState([])
-  const [streamConnected, setStreamConnected] = useState(false)
-  const [activeSection, setActiveSection] = useState('overview')
-  const [showConfig, setShowConfig] = useState(false)
-  const lastTraceIdRef = useRef('')
-  const brainConfigSignatureRef = useRef('')
-  const retryDelayRef = useRef(1000)
-  const retryTimeoutRef = useRef(null)
+  const [growthTrial, setGrowthTrial] = useState(null)
+  const [queryText, setQueryText] = useState('')
+  const [contextText, setContextText] = useState('')
+  const [response, setResponse] = useState(null)
+  const [connected, setConnected] = useState(false)
+  const [pending, setPending] = useState('')
+  const [error, setError] = useState('')
+  const reconnectRef = useRef(null)
+
+  const runtime = terminus?.terminus_runtime || status?.terminus_runtime || {}
+  const truth = status?.runtime_truth || terminus?.runtime_truth || {}
+  const evidence = truth?.evidence || {}
+  const device = evidence.runtime_device || status?.runtime_scope?.device || {}
+  const columns = status?.runtime_scope?.column_runtime || evidence.column_runtime || {}
+  const spikeHealth = status?.runtime_scope?.spike_health || evidence.subcortex_spike_health || {}
+  const memory = status?.memory_store || {}
+  const benchmark = evidence.benchmark_evidence_currency || {}
+
+  async function refreshCore() {
+    const [nextStatus, nextTerminus, nextCheckpoints, nextTraces, nextGrowth] = await Promise.allSettled([
+      requestJson(apiBase, '/status', { timeoutMs: 10000 }),
+      requestJson(apiBase, '/terminus', { timeoutMs: 10000 }),
+      requestJson(apiBase, '/checkpoints', { timeoutMs: 5000 }),
+      requestJson(apiBase, '/traces?limit=12', { timeoutMs: 5000 }),
+      requestJson(
+        apiBase,
+        '/terminus/subcortical-structural-plasticity/binding-growth-trial?max_candidates=8&max_total_edge_delta=16',
+        { timeoutMs: 10000 },
+      ),
+    ])
+
+    if (nextStatus.status === 'fulfilled') setStatus(nextStatus.value)
+    if (nextTerminus.status === 'fulfilled') setTerminus(nextTerminus.value)
+    if (nextCheckpoints.status === 'fulfilled') {
+      const items = nextCheckpoints.value.checkpoints || []
+      setCheckpoints(items)
+      setSelectedCheckpoint((current) => current || nextStatus.value?.checkpoint_path || items[0]?.path || '')
+    }
+    if (nextTraces.status === 'fulfilled') setTraces(nextTraces.value.traces || [])
+    if (nextGrowth.status === 'fulfilled') setGrowthTrial(nextGrowth.value)
+
+    const firstFailure = [nextStatus, nextTerminus].find((result) => result.status === 'rejected')
+    if (firstFailure) throw firstFailure.reason
+  }
 
   useEffect(() => {
     document.documentElement.classList.add('dark')
-
-    return () => {
-      document.documentElement.classList.remove('dark')
-    }
+    return () => document.documentElement.classList.remove('dark')
   }, [])
-
-  useEffect(() => {
-    setBrainConfigState(createEmptyBrainConfigDraft())
-    setBrainConfigDirty(false)
-    brainConfigSignatureRef.current = ''
-  }, [apiBase])
-
-  const setBrainConfig = useCallback((nextValue) => {
-    setBrainConfigDirty(true)
-    setBrainConfigState((current) => (
-      typeof nextValue === 'function' ? nextValue(current) : nextValue
-    ))
-  }, [])
-
-  const selectedTrace = traces.find((trace) => trace.trace_id === selectedTraceId) || null
-  const activeQuery = previewQuery || selectedTrace?.query_result || null
-  const activeResponse = previewResponse || selectedTrace?.response || null
-  const brainRuntime = status?.terminus_runtime || null
-  const checkpointMetadata = status?.checkpoint_metadata || {}
-  const runtimeScope = status?.runtime_scope || {}
-  const routingIndex = runtimeScope.routing_index || {}
-  const weightDistribution = runtimeScope.weight_distribution || {}
-  const columnInputWeights = weightDistribution.column_input_weights || {}
-  const memoryStore = status?.memory_store || {}
-  const checkpointName = fileName(selectedCheckpoint || status?.checkpoint_path)
-
-  const telemetryData = telemetryHistory.map((item, index) => ({
-    sample: index + 1,
-    tokens: Number(item.token_count || 0),
-    memoryFill: Number(item.memory_store?.slow_buffer_fill_fraction ?? item.memory_fill_fraction ?? 0),
-    driftFloor: Number(item.drift_floor ?? item.drift ?? 0),
-    dopamine: Number(item.dopamine ?? 0),
-    serotonin: Number(item.serotonin ?? 0),
-    acetylcholine: Number(item.acetylcholine ?? 0),
-    norepinephrine: Number(item.norepinephrine ?? 0),
-    grounding_confidence: item.grounding_confidence || {},
-    animation: item.animation || null,
-    n_visual_signatures: Number(item.n_visual_signatures || 0),
-    n_audio_signatures: Number(item.n_audio_signatures || 0),
-  }))
-
-  useEffect(() => {
-    if (!brainRuntime) {
-      return
-    }
-
-    if (brainConfigDirty) {
-      return
-    }
-
-    const nextSignature = createBrainConfigRuntimeSignature(brainRuntime)
-    if (nextSignature === brainConfigSignatureRef.current) {
-      return
-    }
-
-    brainConfigSignatureRef.current = nextSignature
-    setBrainConfigState((current) => ({
-      ...current,
-      ...createBrainConfigDraftFromRuntime(brainRuntime),
-    }))
-  }, [brainConfigDirty, brainRuntime])
-
-  const conversationEntries = conversation.length
-    ? conversation
-    : selectedTrace?.request?.query_text
-      ? [
-        {
-          key: `${selectedTrace.trace_id}-user`,
-          role: 'user',
-          text: selectedTrace.request.query_text,
-        },
-        ...(selectedTrace.response?.response_text
-          ? [{
-            key: `${selectedTrace.trace_id}-assistant`,
-            role: 'assistant',
-            text: selectedTrace.response.response_text,
-          }]
-          : []),
-      ]
-      : []
 
   useEffect(() => {
     let cancelled = false
+    setError('')
+    setConnected(false)
 
-    async function bootstrap() {
-      try {
-        const nextStatus = await requestJson(apiBase, '/status', { timeoutMs: 5000 })
+    refreshCore()
+      .then(() => {
+        if (!cancelled) setConnected(true)
+      })
+      .catch((err) => {
+        if (!cancelled) setError(String(err.message || err))
+      })
 
-        if (cancelled) {
-          return
-        }
-
-        const nextTraceId = nextStatus.last_trace_id || ''
-
-        startTransition(() => {
-          setStatus(nextStatus)
-          setSelectedCheckpoint(nextStatus.checkpoint_path || '')
-          setSelectedTraceId(nextTraceId)
-          setTelemetryHistory((history) => [...history, nextStatus].slice(-80))
-        })
-
-        lastTraceIdRef.current = nextTraceId
+    let source
+    const connect = () => {
+      source = new EventSource(`${apiBase}/stream/status?interval=1`)
+      source.addEventListener('status', (event) => {
+        if (cancelled) return
+        setStatus((current) => ({ ...(current || {}), ...JSON.parse(event.data) }))
+        setConnected(true)
         setError('')
-
-        const [checkpointResult, traceResult] = await Promise.allSettled([
-          requestJson(apiBase, '/checkpoints', { timeoutMs: 3500 }),
-          requestJson(apiBase, '/traces?limit=20', { timeoutMs: 3500 }),
-        ])
-
-        if (cancelled) {
-          return
-        }
-
-        if (checkpointResult.status === 'fulfilled') {
-          const nextCheckpoints = checkpointResult.value.checkpoints || []
-          startTransition(() => {
-            setCheckpoints(nextCheckpoints)
-            setSelectedCheckpoint((current) => (
-              current || nextStatus.checkpoint_path || nextCheckpoints[0]?.path || ''
-            ))
-          })
-        }
-
-        if (traceResult.status === 'fulfilled') {
-          const nextTraces = traceResult.value.traces || []
-          startTransition(() => {
-            setTraces(nextTraces)
-            setSelectedTraceId((current) => current || nextTraceId || nextTraces[0]?.trace_id || '')
-          })
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(String(err.message || err))
-        }
+      })
+      source.onerror = () => {
+        setConnected(false)
+        source.close()
+        reconnectRef.current = window.setTimeout(connect, 2000)
       }
     }
+    connect()
 
-    bootstrap()
+    const terminusPoll = window.setInterval(async () => {
+      try {
+        const next = await requestJson(apiBase, '/terminus', { timeoutMs: 5000 })
+        if (!cancelled) setTerminus(next)
+      } catch {
+        // The status stream remains the fallback.
+      }
+    }, 2500)
 
     return () => {
       cancelled = true
-    }
-  }, [apiBase])
-
-  useEffect(() => {
-    let source = null
-
-    if (retryTimeoutRef.current) {
-      clearTimeout(retryTimeoutRef.current)
-      retryTimeoutRef.current = null
-    }
-
-    const connect = () => {
-      source = new EventSource(`${apiBase}/stream/status?interval=0.5`)
-
-      source.addEventListener('status', (event) => {
-        const payload = JSON.parse(event.data)
-        retryDelayRef.current = 1000
-        setStreamConnected(true)
-        setError('')
-
-        // Push to Zustand store (powers 3D scene + future sections)
-        useTelemetryStore.getState().pushTelemetry(payload)
-
-        startTransition(() => {
-          setStatus((current) => ({ ...(current || {}), ...payload }))
-          setTelemetryHistory((history) => [...history, payload].slice(-80))
-        })
-
-        if (payload.last_trace_id && payload.last_trace_id !== lastTraceIdRef.current) {
-          lastTraceIdRef.current = payload.last_trace_id
-          refreshTraces(payload.last_trace_id)
-        }
-      })
-
-      source.onerror = () => {
-        setStreamConnected(false)
-        setError((current) => current || 'The live status stream dropped. The page will keep trying to reconnect.')
-
-        source.close()
-
-        if (retryTimeoutRef.current) {
-          clearTimeout(retryTimeoutRef.current)
-        }
-
-        const delay = retryDelayRef.current
-        retryTimeoutRef.current = setTimeout(() => {
-          retryTimeoutRef.current = null
-          connect()
-        }, delay)
-        retryDelayRef.current = Math.min(delay * 2, 30000)
-      }
-    }
-
-    connect()
-
-    return () => {
-      if (retryTimeoutRef.current) {
-        clearTimeout(retryTimeoutRef.current)
-        retryTimeoutRef.current = null
-      }
-
       source?.close()
+      window.clearInterval(terminusPoll)
+      if (reconnectRef.current) window.clearTimeout(reconnectRef.current)
     }
   }, [apiBase])
 
-  async function refreshStatus() {
-    try {
-      const payload = await requestJson(apiBase, '/status')
-      useTelemetryStore.getState().setStatus(payload)
-      startTransition(() => {
-        setStatus(payload)
-        setSelectedCheckpoint((current) => current || payload.checkpoint_path || '')
-      })
-      return payload
-    } catch (err) {
-      setError(String(err.message || err))
-      return null
-    }
-  }
-
-  async function refreshTraces(nextTraceId = '') {
-    try {
-      const payload = await requestJson(apiBase, '/traces?limit=20', { timeoutMs: 5000 })
-      const nextTraces = payload.traces || []
-
-      startTransition(() => {
-        setTraces(nextTraces)
-        setSelectedTraceId((current) => {
-          if (nextTraceId) {
-            return nextTraceId
-          }
-
-          if (current && nextTraces.some((trace) => trace.trace_id === current)) {
-            return current
-          }
-
-          return nextTraces[0]?.trace_id || ''
-        })
-      })
-    } catch (err) {
-      setError(String(err.message || err))
-    }
-  }
-
-  async function refreshCheckpoints() {
-    try {
-      const payload = await requestJson(apiBase, '/checkpoints', { timeoutMs: 5000 })
-      startTransition(() => {
-        setCheckpoints(payload.checkpoints || [])
-      })
-    } catch (err) {
-      setError(String(err.message || err))
-    }
-  }
-
-  async function configureBrain() {
-    const sourceBank = brainConfig.sourceBank
-      .map((entry, index) => normalizeDraftSource(entry, `terminus_source_${index + 1}`))
-      .filter(Boolean)
-    if (!sourceBank.length) {
-      return
-    }
-
-    const candidateBank = brainConfig.candidateBank
-      .map((entry, index) => normalizeDraftSource(entry, `candidate_source_${index + 1}`))
-      .filter(Boolean)
-
-    setPendingAction('Configuring the Subcortex runtime')
+  async function runAction(label, action) {
+    setPending(label)
     setError('')
-
     try {
-      await requestJson(apiBase, '/terminus/configure', {
+      await action()
+      await refreshCore()
+      setConnected(true)
+    } catch (err) {
+      setError(String(err.message || err))
+    } finally {
+      setPending('')
+    }
+  }
+
+  const quickStart = () => runAction(
+    'Starting the maintained curriculum',
+    () => requestJson(apiBase, '/terminus/quick-start?preset=curriculum', { method: 'POST' }),
+  )
+  const startRuntime = () => runAction(
+    'Starting Terminus',
+    () => requestJson(apiBase, '/terminus/start', { method: 'POST' }),
+  )
+  const stopRuntime = () => runAction(
+    'Stopping Terminus at the current token boundary',
+    () => requestJson(apiBase, '/terminus/stop', { method: 'POST', timeoutMs: 25000 }),
+  )
+  const tickRuntime = () => runAction(
+    'Running one explicit tick',
+    () => requestJson(apiBase, '/terminus/tick', {
+      method: 'POST',
+      body: JSON.stringify({ steps: 1 }),
+      timeoutMs: 120000,
+    }),
+  )
+  const saveCheckpoint = () => runAction(
+    'Saving a quiescent checkpoint',
+    () => requestJson(apiBase, '/checkpoint/save', {
+      method: 'POST',
+      body: JSON.stringify({ path: null }),
+      timeoutMs: 120000,
+    }),
+  )
+  const restoreCheckpoint = () => runAction(
+    'Restoring the selected checkpoint',
+    () => requestJson(apiBase, '/checkpoint/restore', {
+      method: 'POST',
+      body: JSON.stringify({ path: selectedCheckpoint }),
+      timeoutMs: 120000,
+    }),
+  )
+
+  async function submitInteraction(event) {
+    event.preventDefault()
+    const query = queryText.trim()
+    if (!query) return
+    setPending('Producing a grounded Subcortex readout')
+    setError('')
+    try {
+      const result = await requestJson(apiBase, '/respond', {
         method: 'POST',
         body: JSON.stringify({
-          source_bank: sourceBank,
-          tick_tokens: parsePositiveInteger(brainConfig.tickTokens, 128),
-          sleep_interval_seconds: parsePositiveFloat(brainConfig.sleepIntervalSeconds, 0.25),
-          repeat_sources: Boolean(brainConfig.repeatSources),
-          autonomy: brainConfig.autonomyEnabled && candidateBank.length
-            ? {
-              enabled: true,
-              policy: brainConfig.autonomyPolicy || 'active',
-              trigger_interval_tokens: parsePositiveInteger(brainConfig.autonomyTriggerIntervalTokens, 4096),
-              candidate_bank: candidateBank,
-            }
-            : null,
-          curriculum: brainConfig.curriculumConfig,
-          sensory: brainConfig.sensoryConfig,
+          query_text: query,
+          context_text: contextText.trim() || null,
+          learn_mode: 'none',
+          max_evidence_items: 4,
+          top_k_candidates: 6,
+          top_k_memories: 6,
+          top_chars: 6,
         }),
+        timeoutMs: 120000,
       })
-
-      setBrainConfigDirty(false)
-      await refreshStatus()
+      setResponse(result)
+      await refreshCore()
     } catch (err) {
       setError(String(err.message || err))
     } finally {
-      setPendingAction('')
-    }
-  }
-
-  async function startBrain() {
-    setPendingAction('Starting the Subcortex runtime')
-    setError('')
-
-    try {
-      await requestJson(apiBase, '/terminus/start', { method: 'POST' })
-      await refreshStatus()
-    } catch (err) {
-      setError(String(err.message || err))
-    } finally {
-      setPendingAction('')
-    }
-  }
-
-  async function stopBrain() {
-    setPendingAction('Stopping the Subcortex runtime')
-    setError('')
-
-    try {
-      await requestJson(apiBase, '/terminus/stop', { method: 'POST' })
-      await refreshStatus()
-    } catch (err) {
-      setError(String(err.message || err))
-    } finally {
-      setPendingAction('')
-    }
-  }
-
-  async function tickBrain() {
-    setPendingAction('Advancing the Subcortex runtime')
-    setError('')
-
-    try {
-      await requestJson(apiBase, '/terminus/tick', {
-        method: 'POST',
-        body: JSON.stringify({
-          steps: parsePositiveInteger(brainConfig.tickSteps, 1),
-        }),
-      })
-      await refreshStatus()
-    } catch (err) {
-      setError(String(err.message || err))
-    } finally {
-      setPendingAction('')
+      setPending('')
     }
   }
 
   function applyApiBase() {
-    const nextValue = normalizeApiBase(apiBaseInput)
-    setApiBaseInput(nextValue)
-    setApiBase(nextValue)
+    const normalized = normalizeApiBase(apiDraft)
+    setApiDraft(normalized)
+    setApiBase(normalized)
   }
 
-  async function runQuery() {
-    if (!draft.trim()) {
-      return
-    }
-
-    setPendingAction('Inspecting the route and memory matches')
-    setError('')
-
-    try {
-      const payload = await requestJson(apiBase, '/query', {
-        method: 'POST',
-        body: JSON.stringify({
-          query_text: draft.trim(),
-          context_text: contextText || null,
-          top_k_candidates: 6,
-          top_k_memories: 6,
-          top_chars: 6,
-        }),
-      })
-
-      setPreviewQuery(payload)
-      setPreviewResponse(null)
-      setActiveSection('ask')
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-    } catch (err) {
-      setError(String(err.message || err))
-    } finally {
-      setPendingAction('')
-    }
-  }
-
-  async function sendMessage(event) {
-    event.preventDefault()
-
-    if (!draft.trim()) {
-      return
-    }
-
-    const text = draft.trim()
-    setPendingAction('Producing an evidence-grounded answer')
-    setError('')
-
-    try {
-      const bundle = await requestJson(apiBase, '/respond', {
-        method: 'POST',
-        body: JSON.stringify({
-          query_text: text,
-          context_text: contextText || null,
-          learn_mode: autoLearn ? 'user_and_selected_evidence' : 'none',
-          max_evidence_items: 3,
-          top_k_candidates: 6,
-          top_k_memories: 6,
-          top_chars: 6,
-        }),
-      })
-
-      setDraft('')
-      setPreviewQuery(bundle.query_result)
-      setPreviewResponse(bundle.response)
-      setSelectedTraceId(bundle.trace_id)
-      setActiveSection('ask')
-      lastTraceIdRef.current = bundle.trace_id
-
-      startTransition(() => {
-        setConversation((items) => [
-          ...items,
-          { key: `${bundle.trace_id}-user`, role: 'user', text },
-          {
-            key: `${bundle.trace_id}-assistant`,
-            role: 'assistant',
-            text: bundle.response.response_text,
-          },
-        ])
-      })
-
-      await Promise.all([
-        refreshTraces(bundle.trace_id),
-        refreshCheckpoints(),
-        refreshStatus(),
-      ])
-    } catch (err) {
-      setError(String(err.message || err))
-    } finally {
-      setPendingAction('')
-    }
-  }
-
-  async function saveCheckpoint() {
-    setPendingAction('Saving a new checkpoint')
-    setError('')
-
-    try {
-      const payload = await requestJson(apiBase, '/checkpoint/save', {
-        method: 'POST',
-        body: JSON.stringify({ path: null }),
-      })
-
-      setSelectedCheckpoint(payload.path)
-
-      await Promise.all([
-        refreshCheckpoints(),
-        refreshStatus(),
-      ])
-    } catch (err) {
-      setError(String(err.message || err))
-    } finally {
-      setPendingAction('')
-    }
-  }
-
-  async function restoreCheckpoint() {
-    if (!selectedCheckpoint) {
-      return
-    }
-
-    setPendingAction('Restoring the selected checkpoint')
-    setError('')
-
-    try {
-      await requestJson(apiBase, '/checkpoint/restore', {
-        method: 'POST',
-        body: JSON.stringify({ path: selectedCheckpoint }),
-      })
-
-      setBrainConfigDirty(false)
-      brainConfigSignatureRef.current = ''
-      setBrainConfigState(createEmptyBrainConfigDraft())
-      setConversation([])
-      setPreviewQuery(null)
-      setPreviewResponse(null)
-
-      await Promise.all([
-        refreshStatus(),
-        refreshCheckpoints(),
-        refreshTraces(),
-      ])
-    } catch (err) {
-      setError(String(err.message || err))
-    } finally {
-      setPendingAction('')
-    }
-  }
-
-  function handleTraceSelection(traceId) {
-    setSelectedTraceId(traceId)
-    setPreviewQuery(null)
-    setPreviewResponse(null)
-    setActiveSection('traces')
-    lastTraceIdRef.current = traceId
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-
-  function selectSection(id) {
-    setActiveSection(id)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-
-  function renderActiveSection() {
-    switch (activeSection) {
-      case 'sensory':
-        return (
-          <SensorySection
-            apiBase={apiBase}
-            brainRuntime={brainRuntime}
-          />
-        )
-      case 'architecture':
-        return (
-          <ArchitectureSection
-            apiBase={apiBase}
-            animationData={status?.animation || null}
-          />
-        )
-      case 'animation':
-        return (
-          <AnimationSection
-            animationData={status?.animation || null}
-            telemetry={status}
-          />
-        )
-      case 'neuralspace':
-        return <NeuralSpaceSection />
-      case 'training':
-        return (
-          <TrainingSection
-            status={status}
-            telemetryData={telemetryData}
-          />
-        )
-      case 'ask':
-        return (
-          <AskSection
-            activeQuery={activeQuery}
-            activeResponse={activeResponse}
-            apiBase={apiBase}
-            autoLearn={autoLearn}
-            brainConfig={brainConfig}
-            brainRuntime={brainRuntime}
-            configureBrain={configureBrain}
-            conversationEntries={conversationEntries}
-            draft={draft}
-            pendingAction={pendingAction}
-            refreshStatus={refreshStatus}
-            runQuery={runQuery}
-            selectedTrace={selectedTrace}
-            selectedTraceId={selectedTraceId}
-            sendMessage={sendMessage}
-            setAutoLearn={setAutoLearn}
-            setBrainConfig={setBrainConfig}
-            setDraft={setDraft}
-            startBrain={startBrain}
-            stopBrain={stopBrain}
-            tickBrain={tickBrain}
-          />
-        )
-      case 'grounding':
-        return (
-          <GroundingProbeSection apiBase={apiBase} />
-        )
-      case 'validation':
-        return (
-          <ValidationSection apiBase={apiBase} />
-        )
-      case 'runtime':
-        return (
-          <RuntimeSection
-            checkpointMetadata={checkpointMetadata}
-            columnInputWeights={columnInputWeights}
-            memoryStore={memoryStore}
-            routingIndex={routingIndex}
-            runtimeScope={runtimeScope}
-            status={status}
-            weightDistribution={weightDistribution}
-          />
-        )
-      case 'developmental':
-        return (
-          <DevelopmentalSection
-            runtimeScope={runtimeScope}
-            status={status}
-          />
-        )
-      case 'checkpoints':
-        return (
-          <CheckpointsSection
-            checkpoints={checkpoints}
-            pendingAction={pendingAction}
-            restoreCheckpoint={restoreCheckpoint}
-            saveCheckpoint={saveCheckpoint}
-            selectedCheckpoint={selectedCheckpoint}
-            setSelectedCheckpoint={setSelectedCheckpoint}
-            status={status}
-          />
-        )
-      case 'traces':
-        return (
-          <TracesSection
-            handleTraceSelection={handleTraceSelection}
-            selectedTrace={selectedTrace}
-            selectedTraceId={selectedTraceId}
-            status={status}
-            traces={traces}
-          />
-        )
-      case 'overview':
-      default:
-        return (
-          <OverviewSection
-            activeResponse={activeResponse}
-            apiBase={apiBase}
-            brainRuntime={brainRuntime}
-            checkpointName={checkpointName}
-            memoryStore={memoryStore}
-            pendingAction={pendingAction}
-            selectSection={selectSection}
-            startBrain={startBrain}
-            status={status}
-            stopBrain={stopBrain}
-            streamConnected={streamConnected}
-            telemetryData={telemetryData}
-            tickBrain={tickBrain}
-          />
-        )
-    }
+  const workspaceContent = {
+    runtime: (
+      <RuntimeWorkspace
+        columns={columns}
+        device={device}
+        memory={memory}
+        runtime={runtime}
+        spikeHealth={spikeHealth}
+        status={status}
+        truth={truth}
+      />
+    ),
+    machinery: (
+      <MachineryWorkspace
+        columns={columns}
+        runtime={runtime}
+        status={status}
+      />
+    ),
+    columns: (
+      <ColumnsWorkspace
+        columns={columns}
+        growthTrial={growthTrial}
+        spikeHealth={spikeHealth}
+      />
+    ),
+    sources: <SourcesWorkspace runtime={runtime} />,
+    interaction: (
+      <InteractionWorkspace
+        contextText={contextText}
+        pending={pending}
+        queryText={queryText}
+        response={response}
+        setContextText={setContextText}
+        setQueryText={setQueryText}
+        submitInteraction={submitInteraction}
+      />
+    ),
+    evidence: (
+      <EvidenceWorkspace
+        benchmark={benchmark}
+        checkpoints={checkpoints}
+        growthTrial={growthTrial}
+        pending={pending}
+        restoreCheckpoint={restoreCheckpoint}
+        runtime={runtime}
+        saveCheckpoint={saveCheckpoint}
+        selectedCheckpoint={selectedCheckpoint}
+        setSelectedCheckpoint={setSelectedCheckpoint}
+        traces={traces}
+        truth={truth}
+      />
+    ),
   }
 
   return (
     <TooltipProvider>
       <SidebarProvider defaultOpen>
-        <Sidebar variant="inset" collapsible="icon">
-          <SidebarHeader className="gap-2 border-b border-sidebar-border/50">
+        <Sidebar collapsible="icon" variant="sidebar">
+          <SidebarHeader className="border-b border-sidebar-border p-3">
             <button
               type="button"
-              onClick={() => selectSection('overview')}
-              className="flex w-full items-center gap-3 rounded-lg border bg-sidebar-accent/25 p-3 text-left transition-colors hover:bg-sidebar-accent/40"
+              className="flex w-full items-center gap-3 text-left"
+              onClick={() => setWorkspace('runtime')}
             >
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <BrainIcon className="size-4" />
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
+                <BrainCircuitIcon className="size-5" />
               </div>
-              <div className="min-w-0">
-                <div className="font-semibold tracking-tight">MARULHO</div>
-                <div className="truncate text-[10px] leading-4 text-sidebar-foreground/60">
-                  Subcortex Runtime
-                </div>
-              </div>
-              {/* Heartbeat dot */}
-              <div className="ml-auto">
-                <div
-                  className={`size-2 rounded-full ${
-                    streamConnected
-                      ? 'animate-pulse bg-emerald-400 shadow-sm shadow-emerald-400/50'
-                      : 'bg-red-400'
-                  }`}
-                />
+              <div className="min-w-0 group-data-[collapsible=icon]:hidden">
+                <div className="font-semibold">MARULHO</div>
+                <div className="truncate text-xs text-muted-foreground">Local cognitive runtime</div>
               </div>
             </button>
           </SidebarHeader>
 
           <SidebarContent>
-            {SECTION_GROUPS.map((group) => (
-              <SidebarGroup key={group}>
-                <SidebarGroupLabel className="text-[10px] uppercase tracking-widest">{group}</SidebarGroupLabel>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {SECTIONS.filter((item) => item.group === group).map((item) => (
-                      <SidebarMenuItem key={item.id}>
-                        <SidebarMenuButton
-                          type="button"
-                          isActive={activeSection === item.id}
-                          onClick={() => selectSection(item.id)}
-                          tooltip={item.help}
-                          className={activeSection === item.id ? 'bg-sidebar-accent/60' : ''}
-                        >
-                          <item.icon className={activeSection === item.id ? 'text-primary' : ''} />
-                          <span>{item.label}</span>
-                        </SidebarMenuButton>
-                        {item.id === 'sensory' ? <SidebarMenuBadge>{brainRuntime?.multimodal?.recent_preview_count ?? 0}</SidebarMenuBadge> : null}
-                        {item.id === 'checkpoints' ? <SidebarMenuBadge>{checkpoints.length}</SidebarMenuBadge> : null}
-                        {item.id === 'traces' ? <SidebarMenuBadge>{status?.trace_history_size ?? traces.length}</SidebarMenuBadge> : null}
-                      </SidebarMenuItem>
-                    ))}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </SidebarGroup>
-            ))}
-
-            <SidebarSeparator />
-
             <SidebarGroup>
-              <SidebarGroupLabel className="text-[10px] uppercase tracking-widest">System</SidebarGroupLabel>
-              <SidebarGroupContent className="px-2 pb-2">
-                <div className="space-y-2 rounded-lg bg-sidebar-accent/15 p-3 text-xs">
-                  <QuickStatRow label="Status" value={
-                    <Badge variant={streamConnected ? 'secondary' : 'destructive'} className="h-5 text-[10px]">
-                      {streamConnected ? 'live' : 'offline'}
-                    </Badge>
-                  } />
-                  <QuickStatRow label="Tokens" value={status?.token_count?.toLocaleString() || '—'} />
-                  <QuickStatRow label="Checkpoint" value={checkpointName} truncate />
-                  <QuickStatRow label="Runtime" value={
-                    brainRuntime?.running ? '● running' : brainRuntime?.configured ? '○ idle' : '— unconfigured'
-                  } />
-                  <QuickStatRow label="Last trace" value={formatWhen(status?.last_trace_created_at)} />
-                </div>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {WORKSPACES.map((item) => (
+                    <SidebarMenuItem key={item.id}>
+                      <SidebarMenuButton
+                        isActive={workspace === item.id}
+                        onClick={() => setWorkspace(item.id)}
+                        tooltip={item.label}
+                      >
+                        <item.icon />
+                        <span>{item.label}</span>
+                      </SidebarMenuButton>
+                      {item.id === 'columns' ? (
+                        <SidebarMenuBadge>{columns.awake_count ?? 0}</SidebarMenuBadge>
+                      ) : null}
+                      {item.id === 'evidence' ? (
+                        <SidebarMenuBadge>{checkpoints.length}</SidebarMenuBadge>
+                      ) : null}
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
           </SidebarContent>
 
-          <SidebarFooter>
-            <div className="rounded-lg border bg-sidebar-accent/20 p-3 text-xs text-sidebar-foreground/60">
-              <div className="flex items-center gap-1.5 font-medium text-sidebar-foreground/80">
-                <ShieldCheckIcon className="size-3" />
-                Evidence mode
+          <SidebarFooter className="border-t border-sidebar-border p-3">
+            <div className="space-y-2 group-data-[collapsible=icon]:hidden">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Runtime Truth</span>
+                <StatusBadge value={truth.verdict || 'pending'} />
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Device</span>
+                <span className="font-mono">{device.resolved_device || 'unknown'}</span>
               </div>
             </div>
           </SidebarFooter>
-
           <SidebarRail />
         </Sidebar>
 
-        <SidebarInset className="min-w-0 bg-background">
-          <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur-sm">
-            <div className="flex flex-col gap-3 px-4 py-3 md:px-6">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-3">
-                  <SidebarTrigger />
-                  <div className="hidden h-5 w-px bg-border sm:block" />
-                  <div className="min-w-0">
-                    <h1 className="truncate text-sm font-semibold tracking-tight sm:text-base">
-                      {SECTION_TITLES[activeSection] || 'Overview'}
-                    </h1>
-                    <p className="hidden text-xs text-muted-foreground md:block">
-                      {formatMode(brainRuntime?.runtime_truth?.verdict || status?.runtime_truth?.verdict || 'runtime truth pending')}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
-                  <KpiChip icon={streamConnected ? WifiIcon : WifiOffIcon} active={streamConnected}>
-                    {streamConnected ? 'Live' : 'Offline'}
-                  </KpiChip>
-                  <KpiChip icon={ActivityIcon} active={!!status?.token_count}>
-                    {status?.token_count?.toLocaleString() || '0'} tokens
-                  </KpiChip>
-                  {status?.dirty_state && (
-                    <KpiChip icon={AlertCircleIcon} active={false}>Unsaved</KpiChip>
-                  )}
-                  <Button
-                    type="button"
-                    variant={brainRuntime?.running ? 'secondary' : 'default'}
-                    size="sm"
-                    onClick={startBrain}
-                    disabled={!!pendingAction || brainRuntime?.running}
-                  >
-                    <PlayIcon className="size-3.5" />
-                    Start
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={tickBrain}
-                    disabled={!!pendingAction || !brainRuntime?.configured}
-                  >
-                    <RotateCwIcon className="size-3.5" />
-                    Tick
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="sm"
-                    onClick={stopBrain}
-                    disabled={!!pendingAction || !brainRuntime?.running}
-                  >
-                    <SquareIcon className="size-3.5" />
-                    Stop
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => setShowConfig(c => !c)}
-                    title="Toggle config panel"
-                    aria-label="Toggle config panel"
-                  >
-                    <SettingsIcon className="size-3.5" />
-                  </Button>
-                </div>
+        <SidebarInset className="min-w-0">
+          <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur">
+            <div className="flex min-h-14 flex-wrap items-center gap-2 px-4 py-2 md:px-6">
+              <SidebarTrigger />
+              <Separator orientation="vertical" className="mx-1 h-5" />
+              <div className="min-w-0 flex-1">
+                <h1 className="truncate text-sm font-semibold">
+                  {WORKSPACES.find((item) => item.id === workspace)?.label}
+                </h1>
+                <p className="truncate text-xs text-muted-foreground">
+                  {formatMode(truth.recommended_action || 'runtime evidence pending')}
+                </p>
               </div>
-
+              <HeaderSignal connected={connected} icon={connected ? WifiIcon : WifiOffIcon}>
+                {connected ? 'Live' : 'Offline'}
+              </HeaderSignal>
+              <HeaderSignal active={runtime.running} icon={ActivityIcon}>
+                {runtime.running ? 'Running' : runtime.configured ? 'Stopped' : 'Not configured'}
+              </HeaderSignal>
+              <HeaderSignal active={device.observed_cuda_execution} icon={CpuIcon}>
+                {device.observed_cuda_execution ? 'CUDA observed' : 'CUDA unproven'}
+              </HeaderSignal>
+              <Button
+                size="sm"
+                onClick={runtime.configured ? startRuntime : quickStart}
+                disabled={Boolean(pending) || runtime.running}
+              >
+                <PlayIcon />
+                {runtime.configured ? 'Start' : 'Quick start'}
+              </Button>
+              <Button
+                size="icon-sm"
+                variant="outline"
+                onClick={tickRuntime}
+                disabled={Boolean(pending) || !runtime.configured || runtime.running}
+                title="Run one tick"
+              >
+                <RefreshCwIcon />
+              </Button>
+              <Button
+                size="icon-sm"
+                variant="destructive"
+                onClick={stopRuntime}
+                disabled={Boolean(pending) || !runtime.running}
+                title="Stop runtime"
+              >
+                <SquareIcon />
+              </Button>
             </div>
-
-            {showConfig && (
-              <div className="border-t bg-muted/30 px-4 py-2 md:px-6">
-                <div className="flex flex-wrap items-end gap-3">
-                  <div className="min-w-[200px] space-y-1">
-                    <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                      API Base
-                    </label>
-                    <div className="flex gap-1.5">
-                      <Input
-                        className="h-8 text-xs"
-                        value={apiBaseInput}
-                        onChange={(event) => setApiBaseInput(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            event.preventDefault()
-                            applyApiBase()
-                          }
-                        }}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8"
-                        onClick={applyApiBase}
-                        disabled={normalizeApiBase(apiBaseInput) === apiBase}
-                      >
-                        Apply
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="min-w-[180px] space-y-1">
-                    <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                      Context
-                    </label>
-                    <Input
-                      className="h-8 text-xs"
-                      value={contextText}
-                      onChange={(event) => setContextText(event.target.value)}
-                      placeholder="Optional query context"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
           </header>
 
-          <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">
+          <main className="space-y-4 p-4 md:p-6">
+            <div className="flex flex-wrap items-end gap-2 border-b pb-4">
+              <div className="min-w-[240px] flex-1">
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">API endpoint</label>
+                <Input
+                  value={apiDraft}
+                  onChange={(event) => setApiDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') applyApiBase()
+                  }}
+                />
+              </div>
+              <Button variant="outline" onClick={applyApiBase} disabled={normalizeApiBase(apiDraft) === apiBase}>
+                Apply
+              </Button>
+              <Button variant="ghost" onClick={() => runAction('Refreshing runtime evidence', refreshCore)} disabled={Boolean(pending)}>
+                <RefreshCwIcon />
+                Refresh
+              </Button>
+            </div>
+
             {error ? (
               <Alert variant="destructive">
-                <AlertCircleIcon className="size-4" />
-                <AlertTitle>Service error</AlertTitle>
-                <AlertDescription>{error}</AlertDescription>
+                <TriangleAlertIcon />
+                <AlertTitle>Service operation failed</AlertTitle>
+                <AlertDescription className="break-words">{error}</AlertDescription>
               </Alert>
             ) : null}
-
-            {pendingAction ? (
+            {pending ? (
               <Alert>
-                <LoaderCircleIcon className="size-4 animate-spin" />
-                <AlertTitle>Working</AlertTitle>
-                <AlertDescription>{pendingAction}</AlertDescription>
+                <LoaderCircleIcon className="animate-spin" />
+                <AlertTitle>Operation in progress</AlertTitle>
+                <AlertDescription>{pending}</AlertDescription>
               </Alert>
             ) : null}
 
-            <Suspense fallback={<SectionFallback title={SECTION_TITLES[activeSection]} />}>
-              {renderActiveSection()}
-            </Suspense>
-          </div>
+            {workspaceContent[workspace]}
+          </main>
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>
   )
 }
 
-function QuickStatRow({ label, value, truncate }) {
+function RuntimeWorkspace({ columns, device, memory, runtime, spikeHealth, status, truth }) {
+  const execution = runtime.execution || {}
   return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="text-sidebar-foreground/50">{label}</span>
-      <span className={`font-medium ${truncate ? 'max-w-[100px] truncate' : ''}`}>{value}</span>
+    <div className="space-y-5">
+      <MetricStrip>
+        <Metric label="Runtime Truth" value={formatMode(truth.verdict || 'pending')} detail={formatMode(truth.recommended_action)} />
+        <Metric label="Tokens" value={formatCompactNumber(status?.token_count || 0)} detail={`${runtime.tick_count || 0} completed ticks`} />
+        <Metric label="Throughput" value={`${formatFloat(runtime.tokens_per_second, 2)} tok/s`} detail={`${formatFloat(runtime.last_tick_duration_ms, 1)} ms last tick`} />
+        <Metric label="Memory" value={formatPercent(memory.fill_fraction, 1)} detail={`${memory.size || 0} / ${memory.capacity || 0} records`} />
+        <Metric label="Awake columns" value={`${columns.awake_count || 0} / ${columns.total_columns || 0}`} detail={formatMode(columns.execution?.mode)} />
+      </MetricStrip>
+
+      <Panel title="Current execution" icon={GaugeIcon}>
+        <DataGrid>
+          <Data label="State" value={runtime.running ? 'running' : runtime.configured ? 'stopped' : 'not configured'} />
+          <Data label="Tick phase" value={execution.tick_phase || 'idle'} />
+          <Data label="Source" value={execution.tick_source_name || runtime.next_source_name || 'n/a'} />
+          <Data label="Tick elapsed" value={execution.tick_elapsed_ms == null ? 'n/a' : `${formatFloat(execution.tick_elapsed_ms, 1)} ms`} />
+          <Data label="Background tokens" value={runtime.background_tokens_processed || 0} />
+          <Data label="State revision" value={status?.state_revision ?? 'n/a'} />
+        </DataGrid>
+      </Panel>
+
+      <div className="grid gap-5 xl:grid-cols-2">
+        <Panel title="Device evidence" icon={CpuIcon}>
+          <DataGrid>
+            <Data label="Requested" value={device.requested_device || 'n/a'} />
+            <Data label="Resolved" value={device.resolved_device || 'n/a'} />
+            <Data label="Tensor device" value={device.tensor_device || status?.runtime_scope?.cuda_first_runtime?.tensor_device || 'n/a'} />
+            <Data label="Routing search" value={device.routing_search_device || 'n/a'} />
+            <Data label="CUDA available" value={yesNo(device.cuda_available)} />
+            <Data label="CUDA execution observed" value={yesNo(device.observed_cuda_execution)} />
+          </DataGrid>
+        </Panel>
+
+        <Panel title="Spike health" icon={CircleGaugeIcon}>
+          <DataGrid>
+            <Data label="Activity" value={formatMode(spikeHealth.activity_state)} />
+            <Data label="Silent columns" value={formatPercent(spikeHealth.silent_fraction, 2)} />
+            <Data label="Saturated columns" value={formatPercent(spikeHealth.saturated_fraction, 2)} />
+            <Data label="Stale columns" value={formatPercent(spikeHealth.stale_fraction, 2)} />
+            <Data label="Correlation" value={formatMode(spikeHealth.correlation?.status)} />
+            <Data label="Correlation max" value={formatFloat(spikeHealth.correlation?.max_abs_offdiag_correlation, 3)} />
+          </DataGrid>
+        </Panel>
+      </div>
     </div>
   )
 }
 
-function KpiChip({ icon: Icon, active, children }) {
+function ColumnsWorkspace({ columns, growthTrial, spikeHealth }) {
+  const registry = columns.registry?.columns_sample || []
+  const votes = columns.votes || []
+  const gate = columns.growth_gate || {}
+  const trialGate = growthTrial?.promotion_gate || {}
   return (
-    <div className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 ${
-      active ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' : 'border-border/50 text-muted-foreground'
-    }`}>
-      <Icon className="size-3" />
-      <span className="text-[10px] font-medium">{children}</span>
+    <div className="space-y-5">
+      <MetricStrip>
+        <Metric label="Total" value={columns.total_columns || 0} detail="registered columns" />
+        <Metric label="Awake budget" value={columns.awake_budget || 0} detail={formatPercent(columns.awake_fraction, 2)} />
+        <Metric label="Cached votes" value={columns.cached_vote_count || 0} detail="sleeping state reuse" />
+        <Metric label="Disagreement" value={formatFloat(columns.disagreement?.max, 4)} detail="maximum active vote delta" />
+        <Metric label="Report cost" value={`${formatFloat(columns.metabolism?.report_latency_ms, 2)} ms`} detail={`${columns.metabolism?.snapshot_bytes || 0} snapshot bytes`} />
+      </MetricStrip>
+
+      <div className="grid gap-5 xl:grid-cols-2">
+        <Panel title="Scheduler boundary" icon={Layers3Icon}>
+          <DataGrid>
+            <Data label="Scheduler" value={formatMode(columns.scheduler?.mode)} />
+            <Data label="Execution mode" value={formatMode(columns.execution?.mode)} />
+            <Data label="Scored columns" value={`${columns.execution?.scored_column_count || 0} / ${columns.execution?.total_columns || 0}`} />
+            <Data label="Runs all columns" value={yesNo(columns.runs_all_columns)} />
+            <Data label="Promoted scheduler" value={yesNo(columns.scheduler?.promoted_to_execution)} />
+            <Data label="Fallback" value={columns.scheduler?.fallback_reason || 'none'} />
+          </DataGrid>
+        </Panel>
+        <Panel title="Growth and pruning gates" icon={FlaskConicalIcon}>
+          <DataGrid>
+            <Data label="Repeated surprise" value={gate.repeated_surprise_count ?? 0} />
+            <Data label="Growth candidates" value={gate.candidate_column_count ?? 0} />
+            <Data label="Growth gate" value={gate.ready ? 'ready for trial' : formatMode(gate.evidence)} />
+            <Data label="Trial design" value={formatMode(trialGate.status || 'unavailable')} />
+            <Data label="Pruning candidates" value={columns.pruning_homeostasis?.weak_or_redundant_column_count ?? 0} />
+            <Data label="Spike correlation" value={formatMode(spikeHealth.correlation?.status)} />
+          </DataGrid>
+        </Panel>
+      </div>
+
+      <Panel title="Active column registry" icon={ServerIcon} flush>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Column</TableHead>
+              <TableHead>Role</TableHead>
+              <TableHead>Prediction error</TableHead>
+              <TableHead>Confidence</TableHead>
+              <TableHead>Usefulness</TableHead>
+              <TableHead>Failure streak</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {registry.map((column) => (
+              <TableRow key={column.column_id}>
+                <TableCell className="font-mono">{column.column_id}</TableCell>
+                <TableCell>{formatMode(column.role)}</TableCell>
+                <TableCell>{formatFloat(column.local_state?.prediction_error, 4)}</TableCell>
+                <TableCell>{formatFloat(column.local_state?.confidence, 4)}</TableCell>
+                <TableCell>{formatFloat(column.local_state?.usefulness, 4)}</TableCell>
+                <TableCell>{column.local_state?.prediction_failure_streak ?? 0}</TableCell>
+              </TableRow>
+            ))}
+            {!registry.length ? <EmptyTable colSpan={6} label="No column registry evidence yet." /> : null}
+          </TableBody>
+        </Table>
+      </Panel>
+
+      <Panel title="Column votes" icon={ActivityIcon} flush>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Column</TableHead>
+              <TableHead>State</TableHead>
+              <TableHead>Confidence</TableHead>
+              <TableHead>Disagreement</TableHead>
+              <TableHead>Wake reason</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {votes.map((vote) => (
+              <TableRow key={vote.column_id}>
+                <TableCell className="font-mono">{vote.column_id}</TableCell>
+                <TableCell><StatusBadge value={vote.state} /></TableCell>
+                <TableCell>{formatFloat(vote.confidence, 4)}</TableCell>
+                <TableCell>{formatFloat(vote.disagreement, 4)}</TableCell>
+                <TableCell>{formatMode(vote.wake_reason || vote.sleep_reason)}</TableCell>
+              </TableRow>
+            ))}
+            {!votes.length ? <EmptyTable colSpan={5} label="No column votes observed yet." /> : null}
+          </TableBody>
+        </Table>
+      </Panel>
     </div>
   )
+}
+
+function SourcesWorkspace({ runtime }) {
+  const sources = runtime.source_progress || []
+  const ingestion = runtime.ingestion || {}
+  return (
+    <div className="space-y-5">
+      <MetricStrip>
+        <Metric label="Text sources" value={runtime.source_count || 0} detail={`${runtime.exhausted_source_count || 0} exhausted`} />
+        <Metric label="Buffered tokens" value={ingestion.total_buffered_tokens || 0} detail={`${ingestion.ready_source_count || 0} ready sources`} />
+        <Metric label="Warm latency" value={`${formatFloat(ingestion.startup_warm_latency_ms, 1)} ms`} detail={formatMode(ingestion.startup_state)} />
+        <Metric label="HF sources" value={runtime.huggingface?.source_count || 0} detail={runtime.huggingface?.token_configured ? 'token configured' : 'unauthenticated'} />
+      </MetricStrip>
+
+      <Panel title="Source metabolism" icon={DatabaseIcon} flush>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Source</TableHead>
+              <TableHead>Buffered</TableHead>
+              <TableHead>Tokens</TableHead>
+              <TableHead>Utility</TableHead>
+              <TableHead>Grounding</TableHead>
+              <TableHead>Last activity</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sources.map((source) => (
+              <TableRow key={source.name}>
+                <TableCell>
+                  <div className="font-medium">{source.name}</div>
+                  <div className="text-xs text-muted-foreground">{source.source_type}</div>
+                </TableCell>
+                <TableCell>{source.buffered_tokens || 0} ({formatPercent(source.buffer_fill_fraction, 0)})</TableCell>
+                <TableCell>{source.tokens_processed || 0}</TableCell>
+                <TableCell>{formatFloat(source.utility_ema, 3)}</TableCell>
+                <TableCell>{formatFloat(source.grounding_signal_ema, 3)}</TableCell>
+                <TableCell>{formatWhen(source.last_activity_at)}</TableCell>
+              </TableRow>
+            ))}
+            {!sources.length ? <EmptyTable colSpan={6} label="No configured source progress." /> : null}
+          </TableBody>
+        </Table>
+      </Panel>
+
+      <Panel title="Sensory grounding" icon={GaugeIcon}>
+        <DataGrid>
+          <Data label="Enabled" value={yesNo(runtime.sensory?.enabled)} />
+          <Data label="Sources" value={(runtime.sensory?.source_bank || []).length} />
+          <Data label="Buffered items" value={runtime.sensory?.total_buffered_items ?? 0} />
+          <Data label="Warm ready" value={yesNo(runtime.sensory?.warm_ready)} />
+          <Data label="Episodes completed" value={runtime.multimodal?.real_episodes_completed ?? 0} />
+          <Data label="Next source" value={runtime.multimodal?.next_source_name || 'n/a'} />
+        </DataGrid>
+      </Panel>
+    </div>
+  )
+}
+
+function InteractionWorkspace({
+  contextText,
+  pending,
+  queryText,
+  response,
+  setContextText,
+  setQueryText,
+  submitInteraction,
+}) {
+  const result = response?.response || null
+  const query = response?.query_result || null
+  return (
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.7fr)]">
+      <Panel title="Grounded interaction" icon={MessageSquareTextIcon}>
+        <form className="space-y-4" onSubmit={submitInteraction}>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Question</label>
+            <Textarea
+              value={queryText}
+              onChange={(event) => setQueryText(event.target.value)}
+              placeholder="Ask the current Subcortex state and grounded memory."
+              className="min-h-28"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Optional context</label>
+            <Input value={contextText} onChange={(event) => setContextText(event.target.value)} />
+          </div>
+          <Button type="submit" disabled={Boolean(pending) || !queryText.trim()}>
+            <MessageSquareTextIcon />
+            Run grounded readout
+          </Button>
+        </form>
+      </Panel>
+
+      <Panel title="Readout result" icon={BrainCircuitIcon}>
+        {result ? (
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              <StatusBadge value={result.mode || result.response_mode || 'readout'} />
+              <Badge variant="outline">{formatFloat(result.confidence, 3)} confidence</Badge>
+              <Badge variant="outline">{response?.trace_id ? `trace ${response.trace_id.slice(0, 8)}` : 'untraced'}</Badge>
+            </div>
+            <p className="whitespace-pre-wrap text-sm leading-6">{result.response_text}</p>
+            <Separator />
+            <DataGrid>
+              <Data label="Winner" value={query?.winner_id ?? query?.winner ?? 'n/a'} />
+              <Data label="Memory matches" value={query?.memory_matches?.length ?? 0} />
+              <Data label="Route candidates" value={query?.candidate_ids?.length ?? query?.candidates?.length ?? 0} />
+              <Data label="Grounded" value={yesNo(result.grounded ?? result.grounding_supported)} />
+            </DataGrid>
+          </div>
+        ) : (
+          <EmptyState label="No grounded readout in this session." />
+        )}
+      </Panel>
+    </div>
+  )
+}
+
+function EvidenceWorkspace({
+  benchmark,
+  checkpoints,
+  growthTrial,
+  pending,
+  restoreCheckpoint,
+  runtime,
+  saveCheckpoint,
+  selectedCheckpoint,
+  setSelectedCheckpoint,
+  traces,
+  truth,
+}) {
+  const gates = [
+    ['Binding growth trial', growthTrial?.promotion_gate?.status],
+    ['Structural plasticity', truth.evidence?.structural_plasticity_gate?.promotion_status],
+    ['Self repair', truth.evidence?.self_repair_gate?.promotion_status],
+    ['SNN language', truth.evidence?.snn_language_readiness_gate?.promotion_status],
+  ]
+  return (
+    <div className="space-y-5">
+      <MetricStrip>
+        <Metric label="Benchmark evidence" value={formatMode(benchmark.status || 'missing')} detail={benchmark.current ? 'current' : 'review required'} />
+        <Metric label="Checkpoints" value={checkpoints.length} detail={runtime.running ? 'stop required before save' : 'quiescent save available'} />
+        <Metric label="Traces" value={traces.length} detail="recent operator interactions" />
+        <Metric label="State" value={truth.verdict || 'pending'} detail={truth.generated_at ? formatWhen(truth.generated_at) : 'not sampled'} />
+      </MetricStrip>
+
+      <div className="grid gap-5 xl:grid-cols-2">
+        <Panel title="Checkpoint control" icon={ArchiveIcon}>
+          <div className="space-y-4">
+            <Select value={selectedCheckpoint} onValueChange={setSelectedCheckpoint}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select checkpoint" />
+              </SelectTrigger>
+              <SelectContent>
+                {checkpoints.map((checkpoint) => (
+                  <SelectItem key={checkpoint.path} value={checkpoint.path}>
+                    {checkpoint.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={saveCheckpoint} disabled={Boolean(pending) || runtime.running}>
+                <SaveIcon />
+                Save stopped runtime
+              </Button>
+              <Button
+                variant="outline"
+                onClick={restoreCheckpoint}
+                disabled={Boolean(pending) || runtime.running || !selectedCheckpoint}
+              >
+                <RefreshCwIcon />
+                Restore selected
+              </Button>
+            </div>
+            {runtime.running ? (
+              <p className="text-xs text-amber-300">Stop Terminus before saving or restoring. Live mutation is not serialized.</p>
+            ) : null}
+          </div>
+        </Panel>
+
+        <Panel title="Promotion gates" icon={ShieldCheckIcon}>
+          <div className="divide-y">
+            {gates.map(([label, value]) => (
+              <div key={label} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
+                <span className="text-sm">{label}</span>
+                <StatusBadge value={value || 'unavailable'} />
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+
+      <Panel title="Recent checkpoints" icon={ArchiveIcon} flush>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Size</TableHead>
+              <TableHead>Modified</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {checkpoints.slice(0, 12).map((checkpoint) => (
+              <TableRow key={checkpoint.path}>
+                <TableCell className="font-mono text-xs">{fileName(checkpoint.path)}</TableCell>
+                <TableCell>{formatCompactNumber(checkpoint.size_bytes)} B</TableCell>
+                <TableCell>{formatWhen(checkpoint.modified_at)}</TableCell>
+              </TableRow>
+            ))}
+            {!checkpoints.length ? <EmptyTable colSpan={3} label="No checkpoints found." /> : null}
+          </TableBody>
+        </Table>
+      </Panel>
+
+      <Panel title="Recent traces" icon={MessageSquareTextIcon} flush>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Trace</TableHead>
+              <TableHead>Created</TableHead>
+              <TableHead>Query</TableHead>
+              <TableHead>Mode</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {traces.map((trace) => (
+              <TableRow key={trace.trace_id}>
+                <TableCell className="font-mono text-xs">{trace.trace_id?.slice(0, 12)}</TableCell>
+                <TableCell>{formatWhen(trace.created_at)}</TableCell>
+                <TableCell className="max-w-md truncate">{trace.request?.query_text || 'n/a'}</TableCell>
+                <TableCell>{formatMode(trace.response?.mode || trace.response?.response_mode)}</TableCell>
+              </TableRow>
+            ))}
+            {!traces.length ? <EmptyTable colSpan={4} label="No traces recorded." /> : null}
+          </TableBody>
+        </Table>
+      </Panel>
+    </div>
+  )
+}
+
+function Panel({ children, flush = false, icon: Icon, title }) {
+  return (
+    <section className="overflow-hidden rounded-md border bg-card">
+      <div className="flex items-center gap-2 border-b px-4 py-3">
+        {Icon ? <Icon className="size-4 text-muted-foreground" /> : null}
+        <h2 className="text-sm font-semibold">{title}</h2>
+      </div>
+      <div className={flush ? '' : 'p-4'}>{children}</div>
+    </section>
+  )
+}
+
+function MetricStrip({ children }) {
+  return <div className="grid overflow-hidden rounded-md border bg-card sm:grid-cols-2 xl:grid-cols-5">{children}</div>
+}
+
+function Metric({ detail, label, value }) {
+  return (
+    <div className="min-w-0 border-b p-4 last:border-b-0 sm:border-r xl:border-b-0">
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      <div className="mt-1 truncate text-xl font-semibold tabular-nums">{value}</div>
+      <div className="mt-1 truncate text-xs text-muted-foreground">{detail || 'n/a'}</div>
+    </div>
+  )
+}
+
+function DataGrid({ children }) {
+  return <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">{children}</dl>
+}
+
+function Data({ label, value }) {
+  return (
+    <div className="min-w-0 border-b pb-2">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-1 break-words text-sm font-medium tabular-nums">{value ?? 'n/a'}</dd>
+    </div>
+  )
+}
+
+function HeaderSignal({ active = true, children, connected, icon: Icon }) {
+  const enabled = connected ?? active
+  return (
+    <div className={`hidden items-center gap-1.5 text-xs lg:flex ${enabled ? 'text-foreground' : 'text-muted-foreground'}`}>
+      <Icon className={`size-3.5 ${enabled ? 'text-emerald-400' : ''}`} />
+      {children}
+    </div>
+  )
+}
+
+function StatusBadge({ value }) {
+  const normalized = String(value || 'unknown').toLowerCase()
+  const positive = ['alive', 'awake', 'ready', 'passed', 'current', 'running', 'sparse_responsive'].some((item) => normalized.includes(item))
+  const negative = ['failed', 'dead', 'error', 'blocked', 'missing', 'unavailable'].some((item) => normalized.includes(item))
+  return (
+    <Badge variant={negative ? 'destructive' : positive ? 'default' : 'secondary'} className="max-w-64 truncate">
+      {formatMode(value)}
+    </Badge>
+  )
+}
+
+function EmptyTable({ colSpan, label }) {
+  return (
+    <TableRow>
+      <TableCell colSpan={colSpan} className="h-24 text-center text-muted-foreground">{label}</TableCell>
+    </TableRow>
+  )
+}
+
+function EmptyState({ label }) {
+  return (
+    <div className="flex min-h-40 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
+      <CheckCircle2Icon className="size-5" />
+      <p className="text-sm">{label}</p>
+    </div>
+  )
+}
+
+function yesNo(value) {
+  if (value === true) return 'yes'
+  if (value === false) return 'no'
+  return 'n/a'
 }
 
 export default App

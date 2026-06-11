@@ -32,7 +32,14 @@ export async function requestJson(apiBase, path, options = {}) {
 
   if (!response.ok) {
     const text = await response.text()
-    throw new Error(text || `Request failed with status ${response.status}`)
+    let message = text
+    try {
+      const payload = JSON.parse(text)
+      message = payload.detail || payload.message || text
+    } catch {
+      // Preserve non-JSON service errors as returned.
+    }
+    throw new Error(message || `Request failed with status ${response.status}`)
   }
 
   return response.json()

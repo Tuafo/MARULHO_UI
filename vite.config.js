@@ -11,17 +11,6 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
-  build: {
-    chunkSizeWarningLimit: 600,
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          three: ['three'],
-          'r3f': ['@react-three/fiber', '@react-three/drei'],
-        },
-      },
-    },
-  },
   server: {
     host: '127.0.0.1',
     port: 5173,
