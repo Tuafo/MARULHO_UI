@@ -472,29 +472,50 @@ function App() {
 
     async function bootstrap() {
       try {
-        const [nextStatus, nextCheckpoints, nextTraces] = await Promise.all([
-          requestJson(apiBase, '/status'),
-          requestJson(apiBase, '/checkpoints'),
-          requestJson(apiBase, '/traces?limit=20'),
-        ])
+        const nextStatus = await requestJson(apiBase, '/status', { timeoutMs: 5000 })
 
         if (cancelled) {
           return
         }
 
-        const nextTraceId = nextStatus.last_trace_id || nextTraces.traces?.[0]?.trace_id || ''
+        const nextTraceId = nextStatus.last_trace_id || ''
 
         startTransition(() => {
           setStatus(nextStatus)
-          setCheckpoints(nextCheckpoints.checkpoints || [])
-          setTraces(nextTraces.traces || [])
-          setSelectedCheckpoint(nextStatus.checkpoint_path || nextCheckpoints.checkpoints?.[0]?.path || '')
+          setSelectedCheckpoint(nextStatus.checkpoint_path || '')
           setSelectedTraceId(nextTraceId)
           setTelemetryHistory((history) => [...history, nextStatus].slice(-80))
         })
 
         lastTraceIdRef.current = nextTraceId
         setError('')
+
+        const [checkpointResult, traceResult] = await Promise.allSettled([
+          requestJson(apiBase, '/checkpoints', { timeoutMs: 3500 }),
+          requestJson(apiBase, '/traces?limit=20', { timeoutMs: 3500 }),
+        ])
+
+        if (cancelled) {
+          return
+        }
+
+        if (checkpointResult.status === 'fulfilled') {
+          const nextCheckpoints = checkpointResult.value.checkpoints || []
+          startTransition(() => {
+            setCheckpoints(nextCheckpoints)
+            setSelectedCheckpoint((current) => (
+              current || nextStatus.checkpoint_path || nextCheckpoints[0]?.path || ''
+            ))
+          })
+        }
+
+        if (traceResult.status === 'fulfilled') {
+          const nextTraces = traceResult.value.traces || []
+          startTransition(() => {
+            setTraces(nextTraces)
+            setSelectedTraceId((current) => current || nextTraceId || nextTraces[0]?.trace_id || '')
+          })
+        }
       } catch (err) {
         if (!cancelled) {
           setError(String(err.message || err))
@@ -588,7 +609,7 @@ function App() {
 
   async function refreshTraces(nextTraceId = '') {
     try {
-      const payload = await requestJson(apiBase, '/traces?limit=20')
+      const payload = await requestJson(apiBase, '/traces?limit=20', { timeoutMs: 5000 })
       const nextTraces = payload.traces || []
 
       startTransition(() => {
@@ -612,7 +633,7 @@ function App() {
 
   async function refreshCheckpoints() {
     try {
-      const payload = await requestJson(apiBase, '/checkpoints')
+      const payload = await requestJson(apiBase, '/checkpoints', { timeoutMs: 5000 })
       startTransition(() => {
         setCheckpoints(payload.checkpoints || [])
       })
