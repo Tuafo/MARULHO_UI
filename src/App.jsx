@@ -490,6 +490,9 @@ function App() {
 
 function RuntimeWorkspace({ columns, device, memory, runtime, spikeHealth, status, truth }) {
   const execution = runtime.execution || {}
+  const stageTimings = Object.entries(
+    truth?.latency_ms?.stages || runtime.last_tick_stage_timings_ms || {},
+  ).sort(([, left], [, right]) => Number(right || 0) - Number(left || 0))
   return (
     <div className="space-y-5">
       <MetricStrip>
@@ -510,6 +513,16 @@ function RuntimeWorkspace({ columns, device, memory, runtime, spikeHealth, statu
           <Data label="State revision" value={status?.state_revision ?? 'n/a'} />
         </DataGrid>
       </Panel>
+
+      {stageTimings.length ? (
+        <Panel title="Last tick stage profile" icon={CircleGaugeIcon}>
+          <DataGrid>
+            {stageTimings.map(([stage, duration]) => (
+              <Data key={stage} label={formatMode(stage)} value={`${formatFloat(duration, 2)} ms`} />
+            ))}
+          </DataGrid>
+        </Panel>
+      ) : null}
 
       <div className="grid gap-5 xl:grid-cols-2">
         <Panel title="Device evidence" icon={CpuIcon}>
