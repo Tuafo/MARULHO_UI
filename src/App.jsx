@@ -102,39 +102,78 @@ function App() {
   const [error, setError] = useState('')
   const reconnectRef = useRef(null)
 
-  const runtime = terminus?.terminus_runtime || status?.terminus_runtime || {}
-  const truth = status?.runtime_truth || terminus?.runtime_truth || {}
+  const brainTrace = status?.last_trace || {}
+  const brainReadout = status?.readout || {}
+  const brainGeneration = status?.last_generation || {}
+  const runtime = terminus?.terminus_runtime || status?.terminus_runtime || {
+    configured: true,
+    running: false,
+    tick_count: brainTrace.step || 0,
+    tokens_per_second: brainTrace.throughput_tokens_per_sec || 0,
+    last_tick_duration_ms: brainTrace.elapsed_ms || 0,
+    execution: {
+      tick_phase: brainTrace.event || 'idle',
+      tick_source_name: brainTrace.source || 'brain',
+    },
+    background_tokens_processed: status?.queued_tokens || 0,
+    source_progress: [],
+    ingestion: {
+      total_buffered_tokens: status?.queued_tokens || 0,
+      ready_source_count: status?.queued_tokens ? 1 : 0,
+      startup_state: 'brain-source-buffer',
+    },
+  }
+  const truth = status?.runtime_truth || terminus?.runtime_truth || {
+    verdict: status ? 'brain_trace' : 'pending',
+    recommended_action: status ? 'marulho brain spine active' : 'connect to brain runtime',
+    evidence: {
+      runtime_device: {
+        requested_device: 'brain',
+        resolved_device: status?.device,
+        tensor_device: status?.device,
+        cuda_available: status?.cuda_available,
+        observed_cuda_execution: status?.cuda_available && status?.device?.startsWith('cuda'),
+      },
+      benchmark_evidence_currency: {
+        status: brainTrace.throughput_tokens_per_sec ? 'fresh_brain_tick' : 'missing',
+        current: Boolean(brainTrace.throughput_tokens_per_sec),
+      },
+    },
+  }
   const evidence = truth?.evidence || {}
   const device = evidence.runtime_device || status?.runtime_scope?.device || {}
   const columns = status?.runtime_scope?.column_runtime || evidence.column_runtime || {}
   const spikeHealth = status?.runtime_scope?.spike_health || evidence.subcortex_spike_health || {}
-  const memory = status?.memory_store || {}
+  const memory = status?.memory_store || {
+    size: brainReadout.observed_transition_count || 0,
+    capacity: Math.max(1, brainReadout.observed_transition_count || 0),
+    fill_fraction: brainReadout.observed_transition_count ? 1 : 0,
+  }
   const benchmark = evidence.benchmark_evidence_currency || {}
 
   async function refreshCore() {
-    const [nextStatus, nextTerminus, nextCheckpoints, nextTraces, nextGrowth] = await Promise.allSettled([
-      requestJson(apiBase, '/status', { timeoutMs: 10000 }),
-      requestJson(apiBase, '/terminus', { timeoutMs: 10000 }),
-      requestJson(apiBase, '/checkpoints', { timeoutMs: 5000 }),
-      requestJson(apiBase, '/traces?limit=12', { timeoutMs: 5000 }),
-      requestJson(
-        apiBase,
-        '/terminus/subcortical-structural-plasticity/binding-growth-trial?max_candidates=8&max_total_edge_delta=16',
-        { timeoutMs: 10000 },
-      ),
+    const [nextStatus, nextCheckpoints, nextTraces] = await Promise.allSettled([
+      requestJson(apiBase, '/brain/status', { timeoutMs: 10000 }),
+      requestJson(apiBase, '/brain/checkpoints', { timeoutMs: 5000 }),
+      requestJson(apiBase, '/brain/traces?limit=12', { timeoutMs: 5000 }),
     ])
 
     if (nextStatus.status === 'fulfilled') setStatus(nextStatus.value)
-    if (nextTerminus.status === 'fulfilled') setTerminus(nextTerminus.value)
+    setTerminus(null)
     if (nextCheckpoints.status === 'fulfilled') {
       const items = nextCheckpoints.value.checkpoints || []
       setCheckpoints(items)
       setSelectedCheckpoint((current) => current || nextStatus.value?.checkpoint_path || items[0]?.path || '')
     }
     if (nextTraces.status === 'fulfilled') setTraces(nextTraces.value.traces || [])
-    if (nextGrowth.status === 'fulfilled') setGrowthTrial(nextGrowth.value)
+    if (nextStatus.status === 'fulfilled') {
+      setGrowthTrial({
+        promotion_gate: { status: 'brain_trace' },
+        status: nextStatus.value?.last_trace?.event || 'idle',
+      })
+    }
 
-    const firstFailure = [nextStatus, nextTerminus].find((result) => result.status === 'rejected')
+    const firstFailure = [nextStatus].find((result) => result.status === 'rejected')
     if (firstFailure) throw firstFailure.reason
   }
 
@@ -158,13 +197,13 @@ function App() {
 
     let source
     const connect = () => {
-      source = new EventSource(`${apiBase}/stream/status?interval=1`)
-      source.addEventListener('status', (event) => {
+      source = new EventSource(`${apiBase}/brain/stream/status?interval=1`)
+      source.onmessage = (event) => {
         if (cancelled) return
-        setStatus((current) => ({ ...(current || {}), ...JSON.parse(event.data) }))
+        setStatus(JSON.parse(event.data))
         setConnected(true)
         setError('')
-      })
+      }
       source.onerror = () => {
         setConnected(false)
         source.close()
@@ -173,19 +212,19 @@ function App() {
     }
     connect()
 
-    const terminusPoll = window.setInterval(async () => {
+    const statusPoll = window.setInterval(async () => {
       try {
-        const next = await requestJson(apiBase, '/terminus', { timeoutMs: 5000 })
-        if (!cancelled) setTerminus(next)
+        const next = await requestJson(apiBase, '/brain/status', { timeoutMs: 5000 })
+        if (!cancelled) setStatus(next)
       } catch {
-        // The status stream remains the fallback.
+        // The stream reconnect loop remains the fallback.
       }
     }, 2500)
 
     return () => {
       cancelled = true
       source?.close()
-      window.clearInterval(terminusPoll)
+      window.clearInterval(statusPoll)
       if (reconnectRef.current) window.clearTimeout(reconnectRef.current)
     }
   }, [apiBase])
@@ -205,28 +244,36 @@ function App() {
   }
 
   const quickStart = () => runAction(
-    'Starting the maintained curriculum',
-    () => requestJson(apiBase, '/terminus/quick-start?preset=curriculum', { method: 'POST' }),
+    'Seeding the brain source buffer',
+    () => requestJson(apiBase, '/brain/feed', {
+      method: 'POST',
+      body: JSON.stringify({
+        text: 'MARULHO brain runtime learns local sparse transitions and generates from its own SNN state.',
+        source: 'ui-seed',
+        learn: true,
+      }),
+      timeoutMs: 120000,
+    }),
   )
   const startRuntime = () => runAction(
-    'Starting Terminus',
-    () => requestJson(apiBase, '/terminus/start', { method: 'POST' }),
+    'Starting the brain adapter',
+    () => requestJson(apiBase, '/brain/start', { method: 'POST' }),
   )
   const stopRuntime = () => runAction(
-    'Stopping Terminus at the current token boundary',
-    () => requestJson(apiBase, '/terminus/stop', { method: 'POST', timeoutMs: 25000 }),
+    'Stopping the brain adapter',
+    () => requestJson(apiBase, '/brain/stop', { method: 'POST', timeoutMs: 25000 }),
   )
   const tickRuntime = () => runAction(
-    'Running one explicit tick',
-    () => requestJson(apiBase, '/terminus/tick', {
+    'Running one brain tick',
+    () => requestJson(apiBase, '/brain/tick', {
       method: 'POST',
-      body: JSON.stringify({ steps: 1 }),
+      body: JSON.stringify({ tokens: 128, source: 'ui' }),
       timeoutMs: 120000,
     }),
   )
   const saveCheckpoint = () => runAction(
-    'Saving a quiescent checkpoint',
-    () => requestJson(apiBase, '/checkpoint/save', {
+    'Saving a brain checkpoint',
+    () => requestJson(apiBase, '/brain/checkpoint/save', {
       method: 'POST',
       body: JSON.stringify({ path: null }),
       timeoutMs: 120000,
@@ -234,7 +281,7 @@ function App() {
   )
   const restoreCheckpoint = () => runAction(
     'Restoring the selected checkpoint',
-    () => requestJson(apiBase, '/checkpoint/restore', {
+    () => requestJson(apiBase, '/brain/checkpoint/restore', {
       method: 'POST',
       body: JSON.stringify({ path: selectedCheckpoint }),
       timeoutMs: 120000,
@@ -245,23 +292,33 @@ function App() {
     event.preventDefault()
     const query = queryText.trim()
     if (!query) return
-    setPending('Producing a grounded Subcortex readout')
+    setPending('Producing a local SNN readout')
     setError('')
     try {
-      const result = await requestJson(apiBase, '/respond', {
+      const result = await requestJson(apiBase, '/brain/generate', {
         method: 'POST',
         body: JSON.stringify({
-          query_text: query,
-          context_text: contextText.trim() || null,
-          learn_mode: 'none',
-          max_evidence_items: 4,
-          top_k_candidates: 6,
-          top_k_memories: 6,
-          top_chars: 6,
+          prompt: [contextText.trim(), query].filter(Boolean).join('\n'),
+          max_tokens: 96,
         }),
         timeoutMs: 120000,
       })
-      setResponse(result)
+      setResponse({
+        trace_id: String(status?.last_trace?.step || result.used_transition_count || ''),
+        response: {
+          mode: 'marulho_brain_generate',
+          response_mode: 'local_snn_readout',
+          confidence: result.available ? 0.5 : 0,
+          response_text: result.text || 'No local transition readout is available yet. Feed or tick the brain first.',
+          grounded: result.owned_by_marulho,
+        },
+        query_result: {
+          winner: result.start_key,
+          candidate_ids: result.visited_state_count ? [result.start_key, result.end_key].filter((value) => value !== null) : [],
+          memory_matches: [],
+        },
+        brain_generation: result,
+      })
       await refreshCore()
     } catch (err) {
       setError(String(err.message || err))
@@ -417,11 +474,11 @@ function App() {
               </HeaderSignal>
               <Button
                 size="sm"
-                onClick={runtime.configured ? startRuntime : quickStart}
+                onClick={brainReadout.observed_transition_count ? startRuntime : quickStart}
                 disabled={Boolean(pending) || runtime.running}
               >
                 <PlayIcon />
-                {runtime.configured ? 'Start' : 'Quick start'}
+                {brainReadout.observed_transition_count ? 'Start' : 'Seed'}
               </Button>
               <Button
                 size="icon-sm"
